@@ -23,7 +23,7 @@ def _fist(cfg):
 def test_inverted_negative_multiturn_servo_round_trips(hand_cfg):
     """A servo calibrated with slack above tight, crossing zero, after a power cycle."""
     raw = load_yaml(hand_cfg.source)
-    raw["servos"][0].update(name=hand_cfg.servos[0].name, slack=284, tight=-464, inverted=True)
+    raw["servos"][0].update(slack=284, tight=-464, inverted=True)  # keep the file's own name
     cfg = hand_config_from_dict(raw)
     s0 = cfg.servos[0]
     assert s0.span == -748 and s0.effective_tight == -464
