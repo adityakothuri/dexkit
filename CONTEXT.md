@@ -99,6 +99,9 @@ print(d.read_position(0), d.read_load(0), d.read_mode(12))
 
 ## Tendon layout and wiring (from the lab's description, 2026-10-02)
 
+**This is a RIGHT hand** (`side: right` in hand.yaml). Roll sign and the adduct directions
+(`index_adduct` toward the thumb, `thumb_adduct` toward mid-palm) are described for a right hand.
+
 12 tendons, one per servo, pull only. Palm side: 5 flexors + `thumb_adduct`. Back side:
 5 extensors + `index_adduct`. Flexor/extensor of a finger are antagonists; the driver
 scales a pair so it never sums past 1.0 (`AntagonistLimit`). Canonical names in

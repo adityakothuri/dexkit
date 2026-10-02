@@ -186,6 +186,7 @@ class HandDefaults:
 class HandConfig:
     servos: list[ServoConfig]
     roll: RollConfig
+    side: str = "right"  # right | left: which hand this is (affects how roll/adduct directions read)
     port: str = "/dev/dexkit_hand"
     baud: int = 1_000_000
     fallback_baud: int = 115_200
@@ -215,6 +216,8 @@ class HandConfig:
         lo, hi = self.voltage_window
         if not lo < hi:
             raise ConfigError("hand.yaml: voltage_window must be [low, high]")
+        if self.side not in ("right", "left"):
+            raise ConfigError("hand.yaml: side must be 'right' or 'left'")
         if self.servo_family not in FAMILY_REGISTERS:
             raise ConfigError(f"hand.yaml: servo_family must be one of {list(FAMILY_REGISTERS)}")
         for s in self.servos:

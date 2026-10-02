@@ -2,7 +2,7 @@
 
 This repo drives the DexKit foam hand and its 3-axis GRBL gantry from plain Python:
 
-- **Hand:** 12× Feetech HLS3620M finger servos and 1× HLS3640M forearm-roll servo, connected through a Waveshare Bus Servo Adapter (A).
+- **Hand:** a right hand. 12× Feetech HLS3620M finger servos and 1× HLS3640M forearm-roll servo, connected through a Waveshare Bus Servo Adapter (A).
 - **Gantry:** a 3018-style frame on a "CNC Pro V5" GRBL board.
 - **Diffusion policy:** CMU's `diff_foam` policy ships alongside as a dormant second layer, wired to the same environment interface.
 

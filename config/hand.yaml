@@ -2,6 +2,7 @@
 # Hand actions are floats in [0, 1] per finger servo (0 = slack, 1 = tight);
 # roll is in degrees. Conversion to ticks happens only in hw/feetech_hand.py.
 # HLS vs STS: address 44 is Goal Torque on HLS, Goal Time on STS.
+side: right
 port: /dev/dexkit_hand
 baud: 1000000
 fallback_baud: 115200
