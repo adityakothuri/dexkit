@@ -303,3 +303,27 @@ def test_reverse_assist_unwinds_and_records_open(hand_cfg, monkeypatch):
     assert h._slack[0] < s0.slack  # open re-based for that tendon only
     assert h._slack[1] == hand_cfg.servos[1].slack
     h.close()
+
+
+def test_reverse_assist_stops_each_tendon_at_its_own_limit(hand_cfg, monkeypatch):
+    """A short-span tendon (adduct) must stop after its own span while longer ones keep going,
+    and a tendon whose open position is known stops exactly there."""
+    from dexkit.hw.feetech_hand import save_positions_state
+    from dexkit.hw.mock import MockFeetechSerial, MockHand, mock_servos_for
+    from dexkit.tools import relax
+
+    cfg = hand_cfg
+    adduct = next(s for s in cfg.servos if s.name == "index_adduct")
+    flex = next(s for s in cfg.servos if s.name == "pinky_flex")
+    adduct.tight = adduct.slack + 150  # a tiny range, like the real index_adduct
+    # pinky_flex: open is known from the state file; it starts 400 ticks pulled
+    save_positions_state({flex.id: {"pos": flex.slack + 400, "slack": flex.slack}})
+    start = {adduct.id: adduct.slack + 150, flex.id: flex.slack + 400}
+    h = MockHand(cfg, latency_s=0, bus=MockFeetechSerial(mock_servos_for(cfg, start_ticks=start)))
+    h.connect()
+    assert "pinky_flex" in h.restore_report["restored"] and "index_adduct" in h.restore_report["assumed"]
+    monkeypatch.setattr(relax, "_key_reader", lambda: ((lambda _t: None), (lambda: None)))  # no key: run to limits
+    relax.unwind(h, [adduct.name, flex.name], rate_hz=20)
+    assert abs(h.bus_sim.servos[adduct.id].goal - adduct.slack) < 20   # stopped after its own 150-tick span
+    assert abs(h.bus_sim.servos[flex.id].goal - flex.slack) < 20       # stopped at its known open, not beyond
+    h.close()

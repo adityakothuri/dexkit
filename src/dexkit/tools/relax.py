@@ -29,7 +29,7 @@ from dexkit.hw.feetech_hand import FeetechHand
 from dexkit.hw.safety import EStopTripped
 
 UNWIND_TICKS_PER_S = 350      # gentle: about one turn per 12 s
-UNWIND_CAP_FRACTION = 1.25    # never unwind more than this times the tendon's calibrated span
+UNWIND_CAP_FRACTION = 1.0     # a tendon with no known open stops after exactly its calibrated span
 UNWIND_TORQUE = 300
 
 
@@ -63,16 +63,30 @@ def unwind(hand: FeetechHand, only: list[str] | None, rate_hz: float = 20.0) -> 
         raise SystemExit(f"no driven tendon matches {only}")
     present = hand.driver.read_positions([s.id for s in chosen])
     start = {s.id: present[s.id] for s in chosen}
-    cap = {s.id: int(UNWIND_CAP_FRACTION * abs(s.span)) for s in chosen}
     sign = {s.id: -1 if s.span >= 0 else 1 for s in chosen}  # release = opposite to the pull direction
+    known = set(hand.restore_report.get("restored", []))
+    index = {s.id: hand.cfg.servos.index(s) for s in chosen}
+    # Where each tendon stops on its own: its known open position if the software trusts it,
+    # otherwise after exactly its calibrated span. It never unwinds past that.
+    limit: dict[int, float] = {}
+    for s in chosen:
+        if s.name in known:
+            room = (hand._slack[index[s.id]] - start[s.id]) * sign[s.id]  # ticks still to release
+            limit[s.id] = max(0.0, room)
+        else:
+            limit[s.id] = UNWIND_CAP_FRACTION * abs(s.span)
     for s in chosen:
         hand.driver.set_goal_torque(s.id, UNWIND_TORQUE)
         hand.driver.set_speed(s.id, UNWIND_TICKS_PER_S * 2)
-    print("REVERSE ASSIST: unwinding", ", ".join(s.name for s in chosen))
-    print("   press ANY key the moment the hand looks open   |   SPACE = e-stop (nothing saved)")
+    print("REVERSE ASSIST: unwinding")
+    for n, s in enumerate(chosen, start=1):
+        how = "to its known open" if s.name in known else f"at most {int(limit[s.id])} ticks (its span)"
+        print(f"   [{n}] {s.name:14s} {how}")
+    print("   number key = stop that tendon   |   any other key = stop all   |   SPACE = e-stop (nothing saved)")
     poll, restore = _key_reader()
     step = UNWIND_TICKS_PER_S / rate_hz
     goal = dict(start)
+    done: set[int] = set()
     stopped_by_key = False
     try:
         t_next = time.monotonic()
@@ -81,16 +95,26 @@ def unwind(hand: FeetechHand, only: list[str] | None, rate_hz: float = 20.0) -> 
             if key == b" ":
                 hand.estop.trip("operator pressed SPACE") if hasattr(hand, "estop") else hand.relax()
                 raise EStopTripped("operator pressed SPACE during reverse assist")
-            if key:
+            if key and key.isdigit() and 1 <= int(key) <= len(chosen):
+                s = chosen[int(key) - 1]
+                if s.id not in done:
+                    done.add(s.id)
+                    print(f"   [{key}] {s.name} stopped")
+            elif key:
                 stopped_by_key = True
                 break
             moving = False
             for s in chosen:
-                if abs(goal[s.id] - start[s.id]) < cap[s.id]:
+                if s.id in done:
+                    continue
+                if abs(goal[s.id] - start[s.id]) + step <= limit[s.id]:
                     goal[s.id] += sign[s.id] * step
                     moving = True
+                else:
+                    done.add(s.id)
+                    print(f"   {s.name} reached its open position; stopped")
             if not moving:
-                print("   safety cap reached on every tendon; stopping")
+                print("   every tendon has stopped")
                 break
             hand.driver.sync_write_positions({sid: int(round(g)) for sid, g in goal.items()})
             t_next += 1.0 / rate_hz
