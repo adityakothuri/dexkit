@@ -144,7 +144,7 @@ def test_calibration_run_skips_done_servos_and_renames(tmp_path, monkeypatch):
 
 
 def test_connect_rebases_to_present_position(hand_cfg):
-    """Servos lose their turn count at power-off; 'open' must be wherever they are at connect."""
+    """Servos lose their turn count at power-off; open comes from hand.yaml on the nearest turn."""
     from dexkit.hw.mock import MockFeetechSerial, MockHand, mock_servos_for
 
     s0 = hand_cfg.servos[0]
@@ -153,9 +153,11 @@ def test_connect_rebases_to_present_position(hand_cfg):
     h.connect()
     only_first = np.zeros(12)
     only_first[0] = 1.0  # one tendon, so the antagonist limit does not scale it
-    for _ in range(12):
+    for _ in range(20):
         h.set_targets(only_first, 0.0)
-    assert h.bus_sim.servos[s0.id].goal == 1711 + s0.span          # full pull = present + span
+    # No memory file: hand.yaml's open (2048) is the truth, placed on the turn nearest 1711 -> 2048.
+    assert h._slack[0] == 2048 and s0.name in h.restore_report["assumed"]
+    assert h.bus_sim.servos[s0.id].goal == 2048 + s0.span
     assert h.bus_sim.servos[hand_cfg.roll.id].goal == hand_cfg.roll.center + 4096  # roll 0 = nearest equivalent center
     f, r = h.last_command
     assert f[0] == pytest.approx(1.0)
@@ -234,11 +236,11 @@ def test_relax_tool_releases_and_turns_torque_off(monkeypatch):
 
     class FakeSession:
         def __init__(self):
-            from dexkit.config import REPO_ROOT, load_hand_config
+            from dexkit.config import config_dir, load_hand_config
             from dexkit.hw.mock import MockHand
             from dexkit.hw.safety import EStop
 
-            self.hand_cfg = load_hand_config(REPO_ROOT / "config" / "hand.yaml")
+            self.hand_cfg = load_hand_config(config_dir() / "hand.yaml")
             self.hand = MockHand(self.hand_cfg, latency_s=0)
             self.hand.connect()
             self.estop = EStop()
@@ -296,11 +298,11 @@ def test_reverse_assist_unwinds_and_records_open(hand_cfg, monkeypatch):
     monkeypatch.setattr(relax, "_key_reader", lambda: ((lambda _t: next(presses, b"k")), (lambda: None)))
     relax.unwind(h, [s0.name], rate_hz=20)  # ~1.5 s of unwinding at 350 ticks/s
     goal = h.bus_sim.servos[s0.id].goal
-    assert goal < s0.slack  # moved in the release direction
+    assert goal < 2048  # moved in the release direction (s0.slack itself is updated in place by write_open)
     saved = load_positions_state()["servos"][str(s0.id)]
     assert abs(saved["slack"] - goal) < 60  # recorded where the servo actually got to
-    assert h._slack[0] < s0.slack  # open re-based for that tendon only
-    assert h._slack[1] == hand_cfg.servos[1].slack
+    assert h._slack[0] < 2048  # open re-based for that tendon only (and written to the test's hand.yaml copy)
+    assert s0.slack == int(h._slack[0]) and h._slack[1] == hand_cfg.servos[1].slack
     h.close()
 
 

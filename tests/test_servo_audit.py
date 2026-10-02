@@ -27,12 +27,13 @@ def test_inverted_negative_multiturn_servo_round_trips(hand_cfg):
     cfg = hand_config_from_dict(raw)
     s0 = cfg.servos[0]
     assert s0.span == -748 and s0.effective_tight == -464
-    h = _hand(cfg, start={s0.id: 3900})  # power-cycled: count reset to within 0..4095
+    h = _hand(cfg, start={s0.id: 3900})  # power-cycled, no memory: hand.yaml's open (284) on the nearest turn
     only = np.zeros(12)
     only[0] = 1.0
     for _ in range(12):
         h.set_targets(only, 0.0)
-    assert h.bus_sim.servos[s0.id].goal == 3900 - 748  # pulls toward lower counts from wherever it woke up
+    assert h._slack[0] == 284 + 4096
+    assert h.bus_sim.servos[s0.id].goal == 284 + 4096 - 748  # curl limit on that turn, toward lower counts
     import time
 
     time.sleep(0.25)  # let the simulated servo arrive
@@ -235,9 +236,9 @@ def test_tight_only_recaptures_curl_limit_from_trusted_open(hand_cfg, tmp_path, 
 
     cfg = hand_cfg
     s0 = cfg.servos[0]
-    trusted_open = s0.slack + 300  # the operator set open 300 ticks further in than calibration
-    save_positions_state({s.id: {"pos": (trusted_open if s is s0 else s.slack), "slack": (trusted_open if s is s0 else s.slack)}
-                          for s in cfg.servos}, roll_center=cfg.roll.center)
+    trusted_open = s0.slack + 300  # the operator set open 300 ticks further in (via --unwind -> hand.yaml)
+    s0.slack, s0.tight = trusted_open, trusted_open + 652
+    save_positions_state({s.id: {"pos": s.slack, "slack": s.slack} for s in cfg.servos}, roll_center=cfg.roll.center)
     raw = load_yaml(cfg.source)
     for e, s in zip(raw["servos"], cfg.servos, strict=True):
         e.update(id=s.id, name=s.name, slack=s.slack, tight=s.tight, inverted=s.inverted, enabled=s.enabled, calibrated=True)
@@ -284,10 +285,10 @@ def test_tune_mode_saves_into_the_pose_file(hand_cfg, mock_hand, estop, tmp_path
 
 
 def test_shipped_poses_use_driven_tendons_and_stay_conservative(hand_cfg):
-    from dexkit.config import REPO_ROOT, load_hand_config
+    from dexkit.config import config_dir, load_hand_config
     from dexkit.control.poses import PoseLibrary
 
-    real = load_hand_config(REPO_ROOT / "config" / "hand.yaml")
+    real = load_hand_config(config_dir() / "hand.yaml")
     lib = PoseLibrary.load(real)
     for n, pose in lib.poses.items():
         if lib.sources.get(n) == "generated":

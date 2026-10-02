@@ -267,7 +267,8 @@ class FeetechHand(HandInterface):
         self._save_positions(present)
 
     def rebase_partial(self, present: dict[int, int], ids: list[int]) -> None:
-        """Current position becomes 'open' for the given servos only; others keep their open."""
+        """Current position becomes 'open' for the given servos only; others keep their open.
+        Also written into hand.yaml (the single source of truth) by the caller via write_open()."""
         slack = self._slack.copy()
         for i, s in enumerate(self.cfg.servos):
             if s.id in ids:
@@ -276,6 +277,26 @@ class FeetechHand(HandInterface):
         self._last_ticks = np.array([present[sid] for sid in self.ids], dtype=np.int64)
         self._last_cmd = (np.zeros(N_FINGERS), self.roll.ticks_to_deg(int(present[self.cfg.roll.id])))
         self._save_positions(present)
+        self.write_open(ids)
+
+    def write_open(self, ids: list[int]) -> None:
+        """Persist the live open (and the live curl limit) of these servos into hand.yaml."""
+        from dexkit.config import dump_yaml, load_yaml
+
+        src = self.cfg.source
+        if src is None:
+            return
+        raw = load_yaml(src)
+        by_id = {e["id"]: e for e in raw["servos"]}
+        for i, s in enumerate(self.cfg.servos):
+            if s.id in ids and s.id in by_id:
+                open_pos = int(self._slack[i])
+                by_id[s.id]["slack"] = open_pos
+                by_id[s.id]["tight"] = int(open_pos + self._span[i])  # same curl limit, same frame
+                s.slack, s.tight = open_pos, int(open_pos + self._span[i])
+        header = src.read_text().split("\n")[0] + "\n" if src.read_text().startswith("#") else ""
+        dump_yaml(raw, src, header=header)
+        log.info("hand.yaml: open updated for servos %s", ids)
 
     def restore_or_rebase(self, present: dict[int, int]) -> None:
         """Recover each finger's absolute open position from the last session.
@@ -293,13 +314,16 @@ class FeetechHand(HandInterface):
             now = present[s.id]
             e = saved.get(str(s.id))
             if e is None:
-                slack[i] = now
+                # No memory yet: hand.yaml is absolute in the count frame it was calibrated in.
+                # Put it on the turn nearest the present reading.
+                k = round((s.slack - now) / TICKS_PER_REV)
+                slack[i] = s.slack - k * TICKS_PER_REV
                 assumed.append(s.name)
                 continue
             k = round((e["pos"] - now) / TICKS_PER_REV)
             drift = abs(e["pos"] - k * TICKS_PER_REV - now)
             if drift <= RESTORE_DRIFT_TICKS:
-                slack[i] = e["slack"] - k * TICKS_PER_REV
+                slack[i] = s.slack - k * TICKS_PER_REV  # hand.yaml's open, on the right turn
                 restored.append(s.name)
                 drifts.append(drift)
             else:
@@ -315,7 +339,7 @@ class FeetechHand(HandInterface):
         try:
             save_positions_state({s.id: {"pos": present[s.id], "slack": int(self._slack[i])}
                                   for i, s in enumerate(self.cfg.servos) if s.id in present},
-                                 roll_center=self.roll.center)
+                                 roll_center=self.roll.center)  # "slack" kept for inspection only
         except OSError as e:
             log.warning("could not save hand positions: %s", e)
 

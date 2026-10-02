@@ -11,9 +11,13 @@ from dexkit.hw.safety import EStop
 
 @pytest.fixture(autouse=True)
 def isolated_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Never write into the real data/ directory from tests."""
+    """Never write into the real data/ or config/ directories from tests: every test gets its
+    own copy of config/ (tools like --unwind and --label-only write hand.yaml in place)."""
+    import shutil
+
+    shutil.copytree(REPO_ROOT / "config", tmp_path / "config")
     monkeypatch.setenv("DEXKIT_DATA", str(tmp_path / "data"))
-    monkeypatch.setenv("DEXKIT_CONFIG", str(REPO_ROOT / "config"))
+    monkeypatch.setenv("DEXKIT_CONFIG", str(tmp_path / "config"))
     return tmp_path / "data"
 
 
@@ -21,8 +25,9 @@ def isolated_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def hand_cfg():
     """The shipped hand.yaml, renumbered to fixed IDs (fingers 1-12, roll 13) so tests don't
     depend on how the bench servos happen to be numbered."""
-    cfg = load_hand_config(REPO_ROOT / "config" / "hand.yaml")
-    from dexkit.config import TENDONS
+    from dexkit.config import TENDONS, config_dir
+
+    cfg = load_hand_config(config_dir() / "hand.yaml")  # the per-test copy, never the real file
 
     for i, (s, name) in enumerate(zip(cfg.servos, TENDONS, strict=True)):
         s.id, s.slack, s.tight, s.inverted, s.stall_load = i + 1, 2048, 2700, False, 800
@@ -38,7 +43,9 @@ def hand_cfg():
 
 @pytest.fixture
 def gantry_cfg():
-    cfg = load_gantry_config(REPO_ROOT / "config" / "gantry.yaml")
+    from dexkit.config import config_dir
+
+    cfg = load_gantry_config(config_dir() / "gantry.yaml")
     cfg.banner_timeout_s = 1.0
     return cfg
 
