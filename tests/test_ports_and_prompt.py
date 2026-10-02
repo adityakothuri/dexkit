@@ -212,3 +212,17 @@ def test_canonical_name_sets_finger_and_role_and_label_only(tmp_path):
     s3 = next(s for s in after.servos if s.id == 3)
     assert (s3.name, s3.finger, s3.role, s3.calibrated) == ("spare_x", "ring", "", True)
     assert s3.slack == next(s for s in before.servos if s.id == 3).slack
+
+
+def test_go_prompt_without_a_terminal_exits_cleanly(capsys):
+    import argparse
+
+    from dexkit.cli import open_session
+
+    def no_tty(_msg: str) -> str:
+        raise EOFError
+
+    args = argparse.Namespace(mock=True, yes=False, verbose=False, config_dir=None, mock_speed=1.0, speed_scale=1.0)
+    with pytest.raises(SystemExit):
+        open_session(args, need_hand=True, prompt=no_tty)
+    assert "normal terminal" in capsys.readouterr().out

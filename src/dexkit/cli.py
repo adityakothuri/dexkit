@@ -157,7 +157,13 @@ def open_session(
     for line in lines:
         print("  " + line)
     if not getattr(args, "yes", False):
-        answer = prompt("Type 'go' to enable motion: ").strip().lower()
+        try:
+            answer = prompt("Type 'go' to enable motion: ").strip().lower()
+        except EOFError:
+            s.close()
+            print("\nno keyboard to confirm with (hand relaxed). Run this from a normal terminal window, "
+                  "or add --yes to skip the prompt.")
+            sys.exit(1)
         if answer != "go":
             s.close()
             print("aborted")
@@ -201,7 +207,10 @@ def establish_frame(s: Session, args: argparse.Namespace, prompt: Prompt) -> Non
             g.restore_frame(tuple(xyz))
             return
         if not getattr(args, "yes", False):
-            ans = prompt(f"Restore saved gantry zero (position {xyz}, assumes the gantry has not moved)? [y/N] ")
+            try:
+                ans = prompt(f"Restore saved gantry zero (position {xyz}, assumes the gantry has not moved)? [y/N] ")
+            except EOFError:
+                ans = "n"
             if ans.strip().lower().startswith("y"):
                 g.restore_frame(tuple(xyz))
                 return
