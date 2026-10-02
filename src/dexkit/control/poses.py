@@ -11,7 +11,7 @@ from typing import Any
 
 import numpy as np
 
-from dexkit.config import HandConfig, config_dir, dump_yaml, load_yaml
+from dexkit.config import FINGERS, ROLES, TENDONS, HandConfig, config_dir, dump_yaml, load_yaml
 from dexkit.hw.base import N_FINGERS, GantryInterface, HandInterface
 from dexkit.hw.safety import ESTOP, EStop, EStopTripped, SafetyTrip
 from dexkit.util import Rate
@@ -33,23 +33,28 @@ class Pose:
         return {"fingers": [round(float(v), 4) for v in self.fingers], "roll": round(float(self.roll), 3)}
 
 
-def resolve_fingers(spec: Any, names: list[str], groups: list[str]) -> np.ndarray:
-    """List of 12, or mapping of servo name / finger group / default -> value."""
+def resolve_fingers(
+    spec: Any, names: list[str], groups: list[str], roles: list[str] | None = None,
+) -> np.ndarray:
+    """List of 12, or a mapping -> value. Keys: servo name > finger group > role > default.
+
+    The canonical tendon vocabulary (thumb_flex, extend, pinky, ...) is always accepted,
+    even for tendons no servo channel has been assigned to yet; those entries do nothing.
+    """
     if isinstance(spec, (list, tuple)):
         return np.asarray(spec, dtype=float)
     if not isinstance(spec, dict):
         raise ValueError(f"fingers must be a list or mapping, got {type(spec).__name__}")
-    valid = set(names) | set(groups) | {"default"}
+    roles = roles or [""] * len(names)
+    valid = set(names) | set(groups) | set(roles) | set(FINGERS) | set(ROLES) | set(TENDONS) | {"default"}
     unknown = set(spec) - valid
     if unknown:
-        raise ValueError(f"unknown finger keys {sorted(unknown)}; valid: {sorted(valid)}")
+        raise ValueError(f"unknown finger keys {sorted(unknown)}; valid: {sorted(valid - {''})}")
     out = np.full(N_FINGERS, float(spec.get("default", 0.0)))
-    for i, g in enumerate(groups):
-        if g in spec:
-            out[i] = float(spec[g])
-    for i, n in enumerate(names):
-        if n in spec:
-            out[i] = float(spec[n])
+    for layer in (roles, groups, names):
+        for i, key in enumerate(layer):
+            if key and key in spec:
+                out[i] = float(spec[key])
     return out
 
 
@@ -64,10 +69,12 @@ class PoseLibrary:
         data = load_yaml(p).get("poses") or {}
         names = hand_cfg.names
         groups = [s.finger for s in hand_cfg.servos]
+        roles = [s.role for s in hand_cfg.servos]
         poses: dict[str, Pose] = {}
         for name, d in data.items():
             try:
-                poses[name] = Pose(resolve_fingers(d.get("fingers", {}), names, groups), float(d.get("roll", 0.0)))
+                poses[name] = Pose(resolve_fingers(d.get("fingers", {}), names, groups, roles),
+                                   float(d.get("roll", 0.0)))
             except (ValueError, TypeError) as e:
                 raise ValueError(f"{p}: pose '{name}': {e}") from e
         for i in range(N_FINGERS):
@@ -76,6 +83,9 @@ class PoseLibrary:
                 f = np.zeros(N_FINGERS)
                 f[i] = 1.0
                 poses[key] = Pose(f, 0.0)
+        if hand_cfg.unassigned:
+            log.warning("servo channels %s are not assigned to a tendon yet; poses only drive the assigned ones",
+                        hand_cfg.unassigned)
         return cls(poses, p)
 
     def __contains__(self, name: str) -> bool:

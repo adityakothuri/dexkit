@@ -22,8 +22,11 @@ def hand_cfg():
     """The shipped hand.yaml, renumbered to fixed IDs (fingers 1-12, roll 13) so tests don't
     depend on how the bench servos happen to be numbered."""
     cfg = load_hand_config(REPO_ROOT / "config" / "hand.yaml")
-    for i, s in enumerate(cfg.servos):
+    from dexkit.config import TENDONS
+
+    for i, (s, name) in enumerate(zip(cfg.servos, TENDONS, strict=True)):
         s.id, s.slack, s.tight, s.inverted, s.stall_load = i + 1, 2048, 2700, False, 800
+        s.name, (s.finger, s.role) = name, TENDONS[name]
     cfg.roll.id, cfg.roll.center, cfg.roll.inverted = 13, 2048, False
     cfg.calibrated_at = None
     for s in cfg.servos:

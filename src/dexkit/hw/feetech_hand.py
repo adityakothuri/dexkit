@@ -32,7 +32,7 @@ from dexkit.hw.feetech_protocol import (
     from_le16,
     le16,
 )
-from dexkit.hw.safety import LoadWatch, SafetyTrip, TempWatch, TickClamp, VoltageGate
+from dexkit.hw.safety import AntagonistLimit, LoadWatch, SafetyTrip, TempWatch, TickClamp, VoltageGate
 
 log = logging.getLogger(__name__)
 
@@ -175,6 +175,7 @@ class FeetechHand(HandInterface):
         self.voltage_gate = VoltageGate(cfg.voltage_window)
         self.temp_watch = TempWatch(cfg.max_temp_c)
         self.load_watch = LoadWatch([s.stall_load for s in cfg.servos], cfg.defaults.stall_time_s)
+        self.antagonists = AntagonistLimit(cfg.antagonist_pairs(), cfg.defaults.antagonist_max_sum)
         self.roll = cfg.roll  # replaced by a re-based copy on connect
         self._span = np.array([s.span for s in cfg.servos], dtype=float)
         self._set_slack(np.array([s.slack for s in cfg.servos], dtype=float), cfg.roll)
@@ -299,6 +300,9 @@ class FeetechHand(HandInterface):
         f = np.clip(np.asarray(fingers, dtype=float), 0.0, 1.0)
         if f.shape != (N_FINGERS,):
             raise ValueError(f"fingers must have shape ({N_FINGERS},)")
+        f = self.antagonists.apply(f)
+        if self.antagonists.limited:
+            log.debug("antagonist limit applied")
         f = np.minimum(f, self._load_cap)
         roll = float(np.clip(roll_deg, -self.roll.range_deg, self.roll.range_deg))
         target = np.append(self.fingers_to_ticks(f), self.roll.deg_to_ticks(roll))

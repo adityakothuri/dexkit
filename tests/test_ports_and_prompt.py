@@ -46,7 +46,8 @@ def test_prompt_drives_hand_and_gantry(mock_hand, mock_gantry, hand_cfg, estop):
     assert mock_gantry.frame_valid
     np.testing.assert_allclose(mock_gantry.get_state().xyz, [10, 5, -2], atol=0.05)
     f, _ = mock_hand.last_command
-    np.testing.assert_allclose(f, 1.0)  # "f 0" was rejected, fist applied
+    expect = [1.0 if s.role == "flex" else 0.0 for s in hand_cfg.servos]
+    np.testing.assert_allclose(f, expect)  # "f 0" was rejected, fist (= flexors) applied
 
 
 def test_echoing_adapter_is_not_mistaken_for_servos(hand_cfg):
@@ -146,12 +147,14 @@ def test_connect_rebases_to_present_position(hand_cfg):
     start = {s0.id: 1711, hand_cfg.roll.id: hand_cfg.roll.center + 4096 - 100}  # roll one turn up, 100 ticks off
     h = MockHand(hand_cfg, latency_s=0, bus=MockFeetechSerial(mock_servos_for(hand_cfg, start_ticks=start)))
     h.connect()
+    only_first = np.zeros(12)
+    only_first[0] = 1.0  # one tendon, so the antagonist limit does not scale it
     for _ in range(12):
-        h.set_targets(np.ones(12), 0.0)
-    assert h.bus_sim.servos[s0.id].goal == 1711 + s0.span          # full curl = present + span
+        h.set_targets(only_first, 0.0)
+    assert h.bus_sim.servos[s0.id].goal == 1711 + s0.span          # full pull = present + span
     assert h.bus_sim.servos[hand_cfg.roll.id].goal == hand_cfg.roll.center + 4096  # roll 0 = nearest equivalent center
     f, r = h.last_command
-    assert np.allclose(f, 1.0)
+    assert f[0] == pytest.approx(1.0)
     h.close()
 
 
@@ -164,6 +167,40 @@ def test_rehome_makes_current_pose_open(mock_hand):
     assert np.allclose(f, 0.0) and mock_hand.torque_on
     sid = mock_hand.cfg.servos[0].id
     half = mock_hand.bus_sim.servos[sid].goal
+    only_first = np.zeros(12)
+    only_first[0] = 1.0  # one tendon, so the antagonist limit does not scale it
     for _ in range(12):
-        mock_hand.set_targets(np.ones(12), 0.0)
+        mock_hand.set_targets(only_first, 0.0)
     assert mock_hand.bus_sim.servos[sid].goal == half + mock_hand.cfg.servos[0].span
+
+
+def test_antagonist_pairs_are_limited(hand_cfg):
+    from dexkit.hw.mock import MockHand
+
+    pairs = hand_cfg.antagonist_pairs()
+    assert len(pairs) == 5
+    h = MockHand(hand_cfg, latency_s=0)
+    h.connect()
+    for _ in range(12):
+        f, _ = h.set_targets(np.ones(12), 0.0)  # everything pulled at once
+    for a, b in pairs:
+        assert f[a] + f[b] == pytest.approx(1.0)
+    adducts = [i for i, s in enumerate(hand_cfg.servos) if s.role == "adduct"]
+    assert all(f[i] == pytest.approx(1.0) for i in adducts)  # adducts are not a pair
+    h.close()
+
+
+def test_canonical_name_sets_finger_and_role_and_label_only(tmp_path):
+    from dexkit.config import ServoConfig, load_hand_config
+    from dexkit.tools.calibrate_hand import main
+
+    s = ServoConfig(id=0, name="index_extend", slack=0, tight=100)
+    assert (s.finger, s.role) == ("index", "extend")
+    out = tmp_path / "hand.yaml"
+    main(["--mock", "--scripted", "--servo", "3", "--out", str(out)])
+    before = load_hand_config(out)
+    main(["--mock", "--label-only", "--servo", "3", "--name", "ring_extend", "--out", str(out)])
+    after = load_hand_config(out)
+    s3 = next(s for s in after.servos if s.id == 3)
+    assert (s3.name, s3.finger, s3.role, s3.calibrated) == ("ring_extend", "ring", "extend", True)
+    assert s3.slack == next(s for s in before.servos if s.id == 3).slack

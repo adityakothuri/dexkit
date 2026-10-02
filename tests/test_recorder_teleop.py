@@ -56,7 +56,7 @@ def test_teleop_controller_keys(hand_cfg, gantry_cfg, mock_hand, mock_gantry, es
     c.handle(KeyEvent("f"))
     for _ in range(25):
         c.tick(poll_gantry=False)
-    assert np.allclose(c.fingers, 1.0)
+    assert np.allclose(c.fingers, [1.0 if s.role == 'flex' else 0.0 for s in hand_cfg.servos])  # fist = flexors
     c.handle(KeyEvent("r"))
     assert c.recorder.active
     c.handle(KeyEvent("space"))

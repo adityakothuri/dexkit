@@ -50,6 +50,20 @@ def _require(d: dict, key: str, where: str) -> Any:
 
 # --------------------------------------------------------------------------- hand
 
+# DexKit tendon layout (CMU Foam Hands Lab): one servo winds one tendon, tendons only
+# pull. Palm side: five flexors + thumb adduction. Back side: five extensors + index
+# adduction. Flexor and extensor of the same finger are antagonists. Which servo
+# channel drives which tendon is recorded in hand.yaml (`name`); a canonical name
+# below fixes `finger` and `role` automatically.
+FINGERS = ("thumb", "index", "middle", "ring", "pinky")
+ROLES = ("flex", "extend", "adduct")
+TENDONS: dict[str, tuple[str, str]] = {
+    **{f"{f}_flex": (f, "flex") for f in FINGERS},
+    **{f"{f}_extend": (f, "extend") for f in FINGERS},
+    "thumb_adduct": ("thumb", "adduct"),
+    "index_adduct": ("index", "adduct"),
+}
+
 TICKS_PER_REV = 4096
 # The bench servos run in multi-turn mode (EEPROM angle limits 0/0): positions are
 # 15-bit sign-magnitude and keep counting past 4095, so limits span several turns.
@@ -92,10 +106,17 @@ class ServoConfig:
     slack: int
     tight: int
     finger: str = ""
+    role: str = ""  # flex | extend | adduct (filled from a canonical name)
     inverted: bool = False
     max_delta_ticks: int = 120
     stall_load: int = 800
     calibrated: bool = False  # set by dexkit-calibrate-hand when slack/tight were measured
+
+    def __post_init__(self) -> None:
+        if self.name in TENDONS:
+            self.finger, self.role = TENDONS[self.name]
+        if self.role and self.role not in ROLES:
+            raise ConfigError(f"hand.yaml: servo {self.id} role must be one of {ROLES}, got '{self.role}'")
 
     @property
     def span(self) -> int:
@@ -157,6 +178,7 @@ class HandDefaults:
     stall_load_factor: float = 1.5
     stall_time_s: float = 0.5
     stall_backoff: float = 0.05
+    antagonist_max_sum: float = 1.0  # flexor + extensor of one finger may never exceed this together
 
 
 @dataclass
@@ -183,6 +205,9 @@ class HandConfig:
         ids = [s.id for s in self.servos] + [self.roll.id]
         if len(set(ids)) != len(ids):
             raise ConfigError(f"hand.yaml: servo IDs must be unique, got {ids}")
+        names = [s.name for s in self.servos]
+        if len(set(names)) != len(names):
+            raise ConfigError(f"hand.yaml: servo names must be unique, got {names}")
         for i in ids:
             if not 0 <= i <= 253:
                 raise ConfigError(f"hand.yaml: servo id {i} out of range 0..253")
@@ -207,6 +232,15 @@ class HandConfig:
     @property
     def names(self) -> list[str]:
         return [s.name for s in self.servos]
+
+    def antagonist_pairs(self) -> list[tuple[int, int]]:
+        """(flexor index, extensor index) for every finger that has both assigned."""
+        by = {(s.finger, s.role): i for i, s in enumerate(self.servos) if s.finger and s.role}
+        return [(by[(f, "flex")], by[(f, "extend")]) for f in FINGERS if (f, "flex") in by and (f, "extend") in by]
+
+    @property
+    def unassigned(self) -> list[int]:
+        return [s.id for s in self.servos if s.name not in TENDONS]
 
     @property
     def uncalibrated_ids(self) -> list[int]:

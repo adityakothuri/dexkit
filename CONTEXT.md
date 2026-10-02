@@ -97,6 +97,16 @@ print(d.read_position(0), d.read_load(0), d.read_mode(12))
 - `config/gantry.yaml` travel box is a stock-3018 default; gantry never connected.
 - The policy layer (`src/dexkit/policy/`) is ported but unused.
 
+## Tendon layout and wiring (from the lab's description, 2026-10-02)
+
+12 tendons, one per servo, pull only. Palm side: 5 flexors + `thumb_adduct`. Back side:
+5 extensors + `index_adduct`. Flexor/extensor of a finger are antagonists; the driver
+scales a pair so it never sums past 1.0 (`AntagonistLimit`). Canonical names in
+`config.TENDONS` set `finger`/`role`; `dexkit-calibrate-hand --wiring` prints the
+channel table; `--label-only --name X` labels a calibrated channel without moving it.
+As of this note: ch 0 = `pinky_flex` (observed curl; confirm it is the palm-side
+tendon), ch 1–6 calibrated but unlabelled, ch 7–12 not yet calibrated.
+
 ## Hardware notes
 
 - The hand can be calibrated and driven **off the gantry**; hand and gantry configs are

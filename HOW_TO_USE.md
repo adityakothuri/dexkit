@@ -122,8 +122,8 @@ dexkit-calibrate-hand
 
 It walks you through every motor, one at a time:
 
-1. **"Pull this finger fully OPEN"**: hold the finger open with your hand, then press **Enter**.
-2. **"Release the finger"**: let go and press **Enter**. The motor now slowly curls the finger.
+1. **"Put this finger in its RELAXED position"**: let the finger sit neutral, not pulled in or back, then press **Enter**.
+2. **"Release the finger"**: let go and press **Enter**. The motor now winds the tendon: a flexor curls the finger in, an extensor bends it back, an adduct pulls it sideways.
 3. **Watch the spool on the first steps.** If it's unwinding the tendon (finger getting looser, or thread coming off the spool), type **`r`** + Enter straight away to reverse. Once you know the right way for one motor, start all the others with `dexkit-calibrate-hand --reverse` if that's the direction that worked (the motors are identical, so they all wind the same way).
 4. When the finger is curled as far as you want, type **`t`** and press **Enter**.
    - Went too far? Type **`u`** + Enter to back up a little.
@@ -134,7 +134,15 @@ It walks you through every motor, one at a time:
 
 At the end it saves everything to `config/hand.yaml`. To do just one motor, run `dexkit-calibrate-hand --servo 5`, using that motor's **ID** from `dexkit-scan` (0–11 for fingers, 12 for the wrist).
 
-**Which ID is which finger?** Nobody knows yet: the names in `config/hand.yaml` (`middle_flex` etc.) are guesses. To find a finger, run `dexkit-calibrate-hand --servo N` for an ID, press Enter twice, and watch which finger moves. Wrong finger? Type **`x`** + Enter to stop that motor and try the next ID. When you've matched them, rename the `name:` entries in `hand.yaml`.
+**Which motor pulls which tendon?** Each motor winds one tendon. There are 12: five *flexors* (curl a finger in, palm side), five *extensors* (bend a finger back), `thumb_adduct` (thumb toward the index) and `index_adduct` (index toward the thumb). Unlabelled channels show as `ch1`, `ch2`… in `dexkit-calibrate-hand --wiring`. To label one, run it and watch what moves:
+
+```bash
+dexkit-calibrate-hand --servo 4                       # watch: which finger, and which way?
+dexkit-calibrate-hand --servo 4 --label-only --name index_extend   # already calibrated: just name it
+dexkit-calibrate-hand --servo 7 --name ring_flex      # not yet calibrated: name it and calibrate in one go
+```
+
+Names must be one of: `thumb_flex index_flex middle_flex ring_flex pinky_flex thumb_extend index_extend middle_extend ring_extend pinky_extend thumb_adduct index_adduct`. Wrong finger while watching? `x` + Enter stops the motor and saves nothing.
 
 ### A6. Test it
 

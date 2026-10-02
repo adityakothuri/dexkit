@@ -26,13 +26,24 @@ scripts/     99-dexkit.rules
 examples/    pick_and_show.yaml
 ```
 
+## Tendon layout
+
+The DexKit hand has 12 tendons, one per servo; tendons only pull. Palm side: `thumb_flex`,
+`index_flex`, `middle_flex`, `ring_flex`, `pinky_flex` (curl a finger in) and `thumb_adduct`
+(thumb toward the index). Back side: the five `*_extend` tendons (bend a finger back) and
+`index_adduct` (index toward the thumb). A finger's flexor and extensor are antagonists:
+`hw/safety.py:AntagonistLimit` scales the pair so they never sum past `antagonist_max_sum`
+(1.0). Which servo channel drives which tendon lives in `hand.yaml` (`name`); a canonical
+name sets `finger` and `role` automatically, and `dexkit-calibrate-hand --wiring` prints the
+table. Poses (`poses.yaml`) address tendons by name, finger or role (`flex`, `extend`, `adduct`).
+
 ## Conventions
 
 The action vector has 16 entries, and the order is fixed in `hw/base.py`:
 
 | Index | Meaning | Units |
 |---|---|---|
-| 0–11 | Finger servos | 0 = slack, 1 = tight |
+| 0–11 | Tendon servos | 0 = tendon relaxed, 1 = fully pulled (calibrated limit) |
 | 12 | Forearm roll | degrees |
 | 13–15 | Gantry X, Y, Z | mm in the zeroed frame |
 

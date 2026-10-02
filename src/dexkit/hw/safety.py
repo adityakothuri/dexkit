@@ -94,6 +94,27 @@ class TickClamp:
         return t
 
 
+class AntagonistLimit:
+    """Flexor and extensor of one finger must not both be pulled hard: scale the pair down
+    so their sum never exceeds max_sum (tendons only pull; both at full would fight)."""
+
+    def __init__(self, pairs: Iterable[tuple[int, int]], max_sum: float = 1.0) -> None:
+        self.pairs = [(int(a), int(b)) for a, b in pairs]
+        self.max_sum = float(max_sum)
+        self.limited = False
+
+    def apply(self, fingers: np.ndarray) -> np.ndarray:
+        f = np.array(fingers, dtype=float)
+        self.limited = False
+        for a, b in self.pairs:
+            total = f[a] + f[b]
+            if total > self.max_sum + 1e-9:
+                f[a] *= self.max_sum / total
+                f[b] *= self.max_sum / total
+                self.limited = True
+        return f
+
+
 class LoadWatch:
     """Tracks how long each finger has been above its stall load."""
 

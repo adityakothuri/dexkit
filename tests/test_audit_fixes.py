@@ -74,4 +74,5 @@ def test_interactive_pose_prompt(mock_hand, hand_cfg):
     cmds = iter(["fist", "f 1 0.3", "roll 15", "bogus", "quit"])
     interactive(mock_hand, lib, 50, 0.1, "linear", EStop(), read=lambda _: next(cmds))
     f, r = mock_hand.last_command
-    assert f[0] == pytest.approx(0.3, abs=0.01) and np.allclose(f[1:], 1.0) and r == pytest.approx(15, abs=0.1)
+    fist = [1.0 if s.role == "flex" else 0.0 for s in mock_hand.cfg.servos]  # fist pulls the flexors only
+    assert f[0] == pytest.approx(0.3, abs=0.01) and np.allclose(f[1:], fist[1:]) and r == pytest.approx(15, abs=0.1)

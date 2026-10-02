@@ -27,6 +27,7 @@ from pathlib import Path
 
 from dexkit.config import (
     MAX_TICKS,
+    TENDONS,
     HandConfig,
     config_dir,
     data_dir,
@@ -89,7 +90,7 @@ def capture_servo(
     defaults = cfg.defaults
     ui.say(f"\n=== servo {sid} ({name}) ===")
     d.set_torque(sid, False)
-    ui.wait_enter("  Torque OFF. Pull this finger fully OPEN by hand and hold it")
+    ui.wait_enter("  Torque OFF. Put this finger in its RELAXED, neutral position (not pulled either way) and hold it")
     slack = d.read_position(sid)
     if slack is None:
         ui.say("  no position reading; skipping")
@@ -102,7 +103,8 @@ def capture_servo(
     d.write_position(sid, slack)
     d.set_torque(sid, True)
     ui.wait_enter("  Torque ON (low limit). Release the finger. Stepping will start; "
-                  "press t+Enter at the desired TIGHT pose (r reverse, u undo, f faster, s slower, x abort)")
+                  "press t+Enter at the fully PULLED pose: curled in for a flexor, bent back for an extensor, "
+                  "over for an adduct (r reverse, u undo, f faster, s slower, x abort)")
     ui.say(f"  stepping toward {'HIGHER' if direction > 0 else 'LOWER'} counts; watch the spool, "
            "r+Enter if it unwinds the tendon")
     step = defaults.calib_step_ticks
@@ -156,6 +158,27 @@ def capture_servo(
     return {"slack": int(slack), "tight": int(tight), "inverted": bool(inverted), "stall_load": stall}
 
 
+def apply_label(entry: dict, name: str, finger: str | None) -> None:
+    entry["name"] = name
+    if name in TENDONS:
+        entry["finger"], entry["role"] = TENDONS[name]
+    else:
+        entry["finger"] = finger or entry.get("finger", "")
+        entry["role"] = ""
+
+
+def print_wiring(cfg: HandConfig) -> None:
+    print("channel -> tendon")
+    for s in cfg.servos:
+        label = s.name if s.name in TENDONS else f"{s.name}  (not a tendon name yet)"
+        print(f"  ch {s.id:2d} -> {label:34s} {'calibrated' if s.calibrated else 'NOT calibrated'}")
+    print(f"  ch {cfg.roll.id:2d} -> forearm roll                       "
+          f"{'calibrated' if cfg.roll.calibrated else 'NOT calibrated'}")
+    missing = sorted(set(TENDONS) - {s.name for s in cfg.servos})
+    if missing:
+        print("  tendons with no channel yet:", ", ".join(missing))
+
+
 def capture_roll(d: FeetechDriver, sid: int, ui: Prompter) -> int | None:
     ui.say(f"\n=== roll servo {sid} ===")
     d.set_torque(sid, False)
@@ -171,8 +194,12 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--force", action="store_true", help="overwrite an existing real calibration")
     p.add_argument("--out", help="output yaml (default config/hand.yaml; data/mock/hand.yaml with --mock)")
     p.add_argument("--range-deg", type=float, default=None, help="roll range +/- degrees (default from yaml)")
-    p.add_argument("--name", help="with --servo: rename it in hand.yaml (e.g. pinky_flex)")
-    p.add_argument("--finger", help="with --servo: its finger group for poses (thumb/index/middle/ring/pinky/palm)")
+    p.add_argument("--name", help="with --servo: the tendon this channel drives, e.g. pinky_flex, index_extend, "
+                   "thumb_adduct (canonical names set finger/role automatically)")
+    p.add_argument("--finger", help="with --servo and a non-canonical --name: its finger group")
+    p.add_argument("--label-only", action="store_true",
+                   help="with --servo and --name: just write the label, do not touch the servo")
+    p.add_argument("--wiring", action="store_true", help="print the channel -> tendon table and exit")
     p.add_argument("--reverse", action="store_true",
                    help="step the opposite way from calib_direction in hand.yaml")
     p.add_argument("--step-ticks", type=int, default=None,
@@ -197,8 +224,27 @@ def main(argv: list[str] | None = None) -> None:
     if out.exists() and cfg.is_calibrated and args.servo is None and not args.force:
         print(f"{out} already holds a full calibration from {cfg.calibrated_at}; use --force or --servo N")
         sys.exit(2)
-    if (args.name or args.finger) and args.servo is None:
-        p.error("--name/--finger need --servo N")
+    if (args.name or args.finger or args.label_only) and args.servo is None:
+        p.error("--name/--finger/--label-only need --servo N")
+    if args.wiring:
+        print_wiring(cfg)
+        return
+    if args.name and args.name not in TENDONS and not args.finger:
+        print(f"'{args.name}' is not a canonical tendon name {sorted(TENDONS)}; pass --finger too, or use one of those")
+        sys.exit(2)
+    if args.label_only:
+        if not args.name or args.servo == cfg.roll.id:
+            p.error("--label-only needs --servo N (a finger channel) and --name")
+        by_id = {s["id"]: s for s in raw["servos"]}
+        if args.servo not in by_id:
+            print(f"servo {args.servo} is not in hand.yaml (IDs {cfg.ids})")
+            sys.exit(2)
+        apply_label(by_id[args.servo], args.name, args.finger)
+        hand_config_from_dict(raw)
+        dump_yaml(raw, out, header=HEADER)
+        print(f"servo {args.servo} -> {args.name}; wrote {out}")
+        print_wiring(load_hand_config(out))
+        return
 
     if args.mock:
         from dexkit.hw.mock import MockFeetechSerial, mock_servos_for
@@ -232,11 +278,8 @@ def main(argv: list[str] | None = None) -> None:
         print("voltages OK:", ", ".join(f"{k}:{v:.1f}V" for k, v in volts.items()))
 
         by_id = {s["id"]: s for s in raw["servos"]}
-        if args.servo is not None and args.servo != cfg.roll.id:
-            if args.name:
-                by_id[args.servo]["name"] = args.name
-            if args.finger:
-                by_id[args.servo]["finger"] = args.finger
+        if args.servo is not None and args.servo != cfg.roll.id and args.name:
+            apply_label(by_id[args.servo], args.name, args.finger)
         direction = -cfg.defaults.calib_direction if args.reverse else cfg.defaults.calib_direction
         captured: list[int] = []
         for sid in targets:
@@ -270,6 +313,7 @@ def main(argv: list[str] | None = None) -> None:
     dump_yaml(raw, out, header=HEADER)
     final = load_hand_config(out)  # re-read to prove the written file loads
     print(f"\nwrote {out}: captured {captured}")
+    print_wiring(final)
     if final.uncalibrated_ids:
         print(f"still to do: {final.uncalibrated_ids}  (run dexkit-calibrate-hand again, or --servo N)")
     else:

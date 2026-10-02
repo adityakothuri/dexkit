@@ -19,11 +19,17 @@ def test_defaults_load_with_generated_curls(hand_cfg):
     for name in ["open", "fist", "pinch", "point", "thumbs_up", "ok", "wave_a", "wave_b"]:
         assert name in lib
     assert all(f"finger_{i}_curl" in lib for i in range(1, 13))
-    assert np.all(lib["open"].fingers == 0) and np.all(lib["fist"].fingers == 1)
-    pinch = lib["pinch"].fingers
-    groups = [s.finger for s in hand_cfg.servos]
-    for i, g in enumerate(groups):
-        assert pinch[i] == pytest.approx(0.8 if g in ("thumb", "index") else 0.1)
+    assert np.all(lib["relax"].fingers == 0)
+    roles = [s.role for s in hand_cfg.servos]
+    names = hand_cfg.names
+    for i in range(12):
+        assert lib["fist"].fingers[i] == (1.0 if roles[i] == "flex" else 0.0)
+        assert lib["open"].fingers[i] == pytest.approx(0.3 if roles[i] == "extend" else 0.0)
+        expect = {"thumb_flex": 0.8, "index_flex": 0.8, "thumb_adduct": 0.6, "index_adduct": 0.6}.get(names[i], 0.0)
+        assert lib["pinch"].fingers[i] == pytest.approx(expect)
+    point = lib["point"].fingers
+    assert point[names.index("index_flex")] == 0 and point[names.index("index_extend")] == 0.5
+    assert point[names.index("middle_flex")] == 1.0
     assert lib["finger_3_curl"].fingers.tolist() == [0, 0, 1] + [0] * 9
     with pytest.raises(KeyError):
         lib["nope"]

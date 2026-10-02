@@ -57,5 +57,6 @@ def test_execute_on_mocks(hand_cfg, mock_hand, mock_gantry, estop):
                      {"roll": 20, "duration": 0.2}, {"wait": 0.1}), lib, BOX)
     execute(s, mock_hand, mock_gantry, lib, rate_hz=50, estop=estop)
     f, r = mock_hand.last_command
-    assert np.allclose(f, 1.0) and r == pytest.approx(20, abs=0.1)
+    assert np.allclose(f, [1.0 if s.role == 'flex' else 0.0 for s in mock_hand.cfg.servos])  # fist = flexors
+    assert r == pytest.approx(20, abs=0.1)
     assert np.allclose(mock_gantry.get_state().xyz, [10, 5, -2], atol=0.1)
