@@ -60,13 +60,15 @@ def test_inverted_servo_maps_toward_lower_ticks(hand_cfg):
 
 
 def test_get_state_normalizes_and_reports_voltage(mock_hand):
+    pull = np.array([0.5 if s.role != "extend" else 0.0 for s in mock_hand.cfg.servos])  # one side of each pair
     for _ in range(15):
-        mock_hand.set_targets(np.full(12, 0.5), 30.0)
+        mock_hand.set_targets(pull, 30.0)
     import time
 
     time.sleep(0.3)
     st = mock_hand.get_state()
-    assert np.allclose(st.fingers, 0.5, atol=0.02)
+    expect = mock_hand.expected_fingers(pull)  # extensors read negative: they paid out for the flexors
+    assert np.allclose(st.fingers, expect, atol=0.02) and np.all(expect[pull == 0] < 0)
     assert st.roll_deg == pytest.approx(30.0, abs=0.5)
     assert st.min_voltage == pytest.approx(7.4)
     assert len(st.ticks) == 13
