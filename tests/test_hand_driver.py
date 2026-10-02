@@ -50,8 +50,10 @@ def test_inverted_servo_maps_toward_lower_ticks(hand_cfg):
     cfg = hand_config_from_dict(raw)
     h = MockHand(cfg, latency_s=0)
     h.connect()
+    only_first = np.zeros(12)
+    only_first[0] = 1.0  # one tendon, so the antagonist limit does not scale it
     for _ in range(10):
-        h.set_targets(np.full(12, 1.0), 0)
+        h.set_targets(only_first, 0)
     assert h.bus_sim.servos[cfg.servos[0].id].goal == 1900
     assert h.ticks_to_fingers(np.array([1900.0] + [2048.0] * 11))[0] == pytest.approx(1.0)
     h.close()
