@@ -180,6 +180,11 @@ class HandDefaults:
     stall_time_s: float = 0.5
     stall_backoff: float = 0.05
     antagonist_max_sum: float = 1.0  # flexor + extensor of one finger may never exceed this together
+    # When one side of a pair winds, the other side must unwind (pay out) the same length of
+    # tendon or it brakes the finger. Ratio of the puller's travel to pay out, and a cap in
+    # ticks so a long take-up span (pinky_flex is 2 turns) can never dump a tendon off its spool.
+    antagonist_payout: float = 1.0
+    antagonist_payout_max_ticks: int = 1000
 
 
 @dataclass

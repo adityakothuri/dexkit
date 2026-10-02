@@ -21,13 +21,14 @@ def test_reset_then_50_steps_converges(mock_hand, mock_gantry, estop):
     env = DexKitEnv(mock_hand, mock_gantry, estop=estop)
     obs = env.reset(duration_s=0.1, rate_hz=50)
     assert obs["agent_pos"].shape == (ACTION_DIM,)
-    target = join_action(np.full(12, 0.4), 20.0, np.array([10.0, 5.0, -2.0]))  # 0.4+0.4 stays under the antagonist limit
+    flex_only = np.array([0.4 if s.role == "flex" else 0.0 for s in mock_hand.cfg.servos])  # pulling both sides would cancel
+    target = join_action(flex_only, 20.0, np.array([10.0, 5.0, -2.0]))
     errs = []
     import time
 
     for _ in range(50):
         obs = env.step(target)
-        errs.append(np.abs(obs["agent_pos"][:12] - 0.4).max())
+        errs.append(np.abs(obs["agent_pos"][:12] - flex_only).max())
         time.sleep(0.01)
     assert errs[-1] < errs[0]
     assert errs[-1] < 0.05

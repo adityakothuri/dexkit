@@ -25,12 +25,13 @@ def test_replay_streams_all_frames(mock_hand, mock_gantry, estop):
     n = 10
     t = np.arange(n) * 0.02
     act = np.zeros((n, 16))
-    act[:, :12] = np.linspace(0, 0.5, n)[:, None]
+    pull = np.array([0.5 if s.role != "extend" else 0.0 for s in mock_hand.cfg.servos])  # flexors + adducts
+    act[:, :12] = np.linspace(0, 1, n)[:, None] * pull
     act[:, 13] = np.linspace(0, 5, n)
     rec = Recording(t=t, action=act, state=act.copy())
     assert replay(env, rec, speed=2.0, lead_in_s=0.1, rate_hz=50) == n
     f, _ = mock_hand.last_command
-    assert np.allclose(f, 0.5, atol=0.02)
+    assert np.allclose(f, pull, atol=0.02)
 
 
 def test_teleop_controller_keys(hand_cfg, gantry_cfg, mock_hand, mock_gantry, estop):

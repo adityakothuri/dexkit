@@ -176,6 +176,9 @@ class FeetechHand(HandInterface):
         self.temp_watch = TempWatch(cfg.max_temp_c)
         self.load_watch = LoadWatch([s.stall_load for s in cfg.servos], cfg.defaults.stall_time_s)
         self.antagonists = AntagonistLimit(cfg.antagonist_pairs(), cfg.defaults.antagonist_max_sum)
+        self._pairs = cfg.antagonist_pairs()
+        self._payout = max(0.0, cfg.defaults.antagonist_payout)
+        self._payout_cap = max(0, cfg.defaults.antagonist_payout_max_ticks)
         self.roll = cfg.roll  # replaced by a re-based copy on connect
         self._span = np.array([s.span for s in cfg.servos], dtype=float)
         self._set_slack(np.array([s.slack for s in cfg.servos], dtype=float), cfg.roll)
@@ -191,13 +194,25 @@ class FeetechHand(HandInterface):
 
     # ---------------------------------------------------------------- re-basing
 
+    def _payout_ticks(self, i: int, other: int) -> float:
+        """How far servo i may unwind past slack while its antagonist `other` is fully pulled."""
+        return min(self._payout * abs(self._span[other]), float(self._payout_cap))
+
     def _set_slack(self, slack: np.ndarray, roll: RollConfig) -> None:
         self._slack = np.asarray(slack, dtype=float)
         self.roll = roll
         tight = self._slack + self._span
+        lo, hi = np.minimum(self._slack, tight), np.maximum(self._slack, tight)
+        for a, b in self._pairs:  # room to pay out: beyond slack, opposite to the pull direction
+            for i, other in ((a, b), (b, a)):
+                room = self._payout_ticks(i, other)
+                if self._span[i] >= 0:
+                    lo[i] -= room
+                else:
+                    hi[i] += room
         self.clamp = TickClamp(
-            lo=np.minimum(self._slack, tight).tolist() + [roll.lo],
-            hi=np.maximum(self._slack, tight).tolist() + [roll.hi],
+            lo=lo.tolist() + [roll.lo],
+            hi=hi.tolist() + [roll.hi],
             max_delta=[s.max_delta_ticks for s in self.cfg.servos] + [roll.max_delta_ticks],
         )
 
@@ -230,8 +245,20 @@ class FeetechHand(HandInterface):
     # ---------------------------------------------------------------- conversions
 
     def fingers_to_ticks(self, fingers: np.ndarray) -> np.ndarray:
+        """Tick targets for normalized pulls, with antagonist pay-out: while one side of a
+        pair winds, the other unwinds the same tendon length (capped) so it does not brake."""
         u = np.clip(np.asarray(fingers, dtype=float), 0.0, 1.0)
-        return self._slack + u * self._span
+        t = self._slack + u * self._span
+        for a, b in self._pairs:
+            for i, other in ((a, b), (b, a)):
+                release = min(self._payout * u[other] * abs(self._span[other]), float(self._payout_cap))
+                t[i] -= np.sign(self._span[i]) * release
+        return t
+
+    def expected_fingers(self, fingers: np.ndarray) -> np.ndarray:
+        """Normalized position each finger servo will report once it reaches `fingers`
+        (negative where a servo has paid out past slack)."""
+        return self.ticks_to_fingers(self.fingers_to_ticks(fingers))
 
     def ticks_to_fingers(self, ticks: np.ndarray) -> np.ndarray:
         span = np.where(self._span == 0, 1.0, self._span)
@@ -307,13 +334,24 @@ class FeetechHand(HandInterface):
         f = np.minimum(f, self._load_cap)
         roll = float(np.clip(roll_deg, -self.roll.range_deg, self.roll.range_deg))
         target = np.append(self.fingers_to_ticks(f), self.roll.deg_to_ticks(roll))
-        ticks = self.clamp.apply(target, self._last_ticks)
+        prev_ticks = self._last_ticks
+        ticks = self.clamp.apply(target, prev_ticks)
         t0 = time.perf_counter()
         self.driver.sync_write_positions(dict(zip(self.ids, ticks.tolist(), strict=True)))
         self.last_loop_ms = (time.perf_counter() - t0) * 1000
         self._last_ticks = ticks
-        sent = (np.clip(self.ticks_to_fingers(ticks[:N_FINGERS]), 0, 1),
-                self.roll.ticks_to_deg(int(ticks[N_FINGERS])))
+        # What was actually commanded, in pull units: the requested pull, advanced only as far
+        # as the slew limit let each servo move this tick. (A servo's ticks also include pay-out
+        # for its antagonist, so ticks cannot simply be converted back to a pull value.)
+        prev_u = self._last_cmd[0]
+        if prev_ticks is None:
+            sent_f = f
+        else:
+            want = target[:N_FINGERS] - prev_ticks[:N_FINGERS]
+            got = ticks[:N_FINGERS] - prev_ticks[:N_FINGERS]
+            frac = np.where(np.abs(want) < 1e-9, 1.0, np.clip(got / np.where(np.abs(want) < 1e-9, 1.0, want), 0, 1))
+            sent_f = prev_u + frac * (f - prev_u)
+        sent = (np.clip(sent_f, 0, 1), self.roll.ticks_to_deg(int(ticks[N_FINGERS])))
         self._last_cmd = sent
         # Release a load cap once the operator commands below it.
         self._load_cap = np.where(np.asarray(fingers) < self._load_cap - 1e-6, 1.0, self._load_cap)

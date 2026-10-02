@@ -198,16 +198,18 @@ def go_to_pose(
     # The servos follow at their own speed register; wait until they have actually arrived
     # (within arrive_tol of what was sent) so the next step starts from a formed pose.
     if arrive_timeout_s > 0:
+        expect = getattr(hand, "expected_fingers", lambda f: f)
+        want = np.asarray(expect(prev_f), dtype=float)  # pay-out moves antagonists past slack
         deadline = time.monotonic() + arrive_timeout_s
         while True:
             estop.check()
             st = hand.get_state()
-            if (np.max(np.abs(np.clip(st.fingers, 0, 1) - prev_f)) < arrive_tol
-                    and abs(st.roll_deg - prev_r) < 3.0):
+            err = float(np.max(np.abs(np.asarray(st.fingers, dtype=float) - want)))
+            if err < arrive_tol and abs(st.roll_deg - prev_r) < 3.0:
                 break
             if time.monotonic() > deadline:
                 log.warning("pose not reached within %.0fs (max finger error %.2f); continuing",
-                            arrive_timeout_s, float(np.max(np.abs(np.clip(st.fingers, 0, 1) - prev_f))))
+                            arrive_timeout_s, err)
                 break
             hand.set_targets(prev_f, prev_r)  # keep commanding; also keeps the safety checks running
             rate.sleep()

@@ -52,7 +52,7 @@ def test_go_to_pose_settles_fast_when_antagonists_scale(mock_hand, hand_cfg, est
     moves = len(mock_hand.calls) - before  # 10 trajectory ticks + a few slew-limited settle ticks
     assert moves < 40, f"settle loop sent {moves} packets: it ran to its cap instead of stopping once nothing changes"
     got, _ = mock_hand.last_command
-    assert got[names.index("index_flex")] + got[names.index("index_extend")] == pytest.approx(1.0)
+    assert got[names.index("index_flex")] + got[names.index("index_extend")] == pytest.approx(1.0, abs=0.02)  # tick rounding
 
 
 def test_calibration_stall_floor_is_above_normal_holding_load(hand_cfg):
@@ -94,3 +94,39 @@ def test_speed_scale_slows_everything(hand_cfg):
     assert after == [max(2, b // 2) for b in steps]
     with pytest.raises(ValueError):
         apply_speed_scale(hand_cfg, 3.0)
+
+
+def test_antagonist_pays_out_when_the_other_side_pulls(hand_cfg):
+    """fist must unwind the extensors by the flexors' travel (capped), or they brake the fingers."""
+    cfg = hand_cfg
+    cfg.defaults.antagonist_payout, cfg.defaults.antagonist_payout_max_ticks = 1.0, 1000
+    h = _hand(cfg)
+    names = cfg.names
+    fi, ei = names.index("index_flex"), names.index("index_extend")
+    for _ in range(20):
+        h.set_targets(_fist(cfg), 0.0)
+    flex, ext = cfg.servos[fi], cfg.servos[ei]
+    assert h.bus_sim.servos[flex.id].goal == flex.tight
+    assert h.bus_sim.servos[ext.id].goal == ext.slack - min(abs(flex.span), 1000)  # paid out past slack
+    want = h.expected_fingers(_fist(cfg))
+    assert want[fi] == pytest.approx(1.0) and want[ei] < 0
+    # and back to relaxed: everything returns to slack
+    for _ in range(20):
+        h.set_targets(np.zeros(12), 0.0)
+    assert h.bus_sim.servos[ext.id].goal == ext.slack and h.bus_sim.servos[flex.id].goal == flex.slack
+    h.close()
+
+
+def test_payout_is_capped_for_long_take_up_spans(hand_cfg):
+    cfg = hand_cfg
+    cfg.defaults.antagonist_payout_max_ticks = 300
+    names = cfg.names
+    fi, ei = names.index("pinky_flex"), names.index("pinky_extend")
+    cfg.servos[fi].tight = cfg.servos[fi].slack + 8000  # a 2-turn flexor like the bench pinky
+    h = _hand(cfg)
+    only = np.zeros(12)
+    only[fi] = 1.0
+    for _ in range(120):
+        h.set_targets(only, 0.0)
+    assert h.bus_sim.servos[cfg.servos[ei].id].goal == cfg.servos[ei].slack - 300
+    h.close()

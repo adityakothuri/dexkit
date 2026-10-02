@@ -7,7 +7,7 @@
 
 poses:
   relax:     {fingers: {default: 0.0}, roll: 0}
-  open:      {fingers: {default: 0.0, extend: 0.3}, roll: 0}
+  open:      {fingers: {default: 0.0, extend: 0.5}, roll: 0}
   open_wide: {fingers: {default: 0.0, extend: 0.7}, roll: 0}
   fist:      {fingers: {default: 0.0, flex: 1.0}, roll: 0}
   point:     {fingers: {default: 0.0, flex: 1.0, index_flex: 0.0, index_extend: 0.5}, roll: 0}
