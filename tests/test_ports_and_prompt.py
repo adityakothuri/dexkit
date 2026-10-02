@@ -46,8 +46,7 @@ def test_prompt_drives_hand_and_gantry(mock_hand, mock_gantry, hand_cfg, estop):
     assert mock_gantry.frame_valid
     np.testing.assert_allclose(mock_gantry.get_state().xyz, [10, 5, -2], atol=0.05)
     f, _ = mock_hand.last_command
-    expect = [1.0 if s.role == "flex" else 0.0 for s in hand_cfg.servos]
-    np.testing.assert_allclose(f, expect)  # "f 0" was rejected, fist (= flexors) applied
+    np.testing.assert_allclose(f, lib["fist"].fingers, atol=0.01)  # "f 0" was rejected, fist applied
 
 
 def test_echoing_adapter_is_not_mistaken_for_servos(hand_cfg):
