@@ -1,9 +1,15 @@
-# Hand signs (right hand). Per finger: flex OR extend, never both high.
+# Hand signs (right hand). Values are conservative until tuned by eye.
 
 poses:
-  peace:      {fingers: {default: 0.0, index_extend: 0.5, middle_extend: 0.5, ring_flex: 1.0, pinky_flex: 1.0, thumb_flex: 0.8, thumb_adduct: 0.5}, roll: 0}
-  rock_on:    {fingers: {default: 0.0, index_extend: 0.5, pinky_extend: 0.5, middle_flex: 1.0, ring_flex: 1.0, thumb_flex: 0.8, thumb_adduct: 0.5}, roll: 0}
-  shaka:      {fingers: {default: 0.0, thumb_extend: 0.5, pinky_extend: 0.5, index_flex: 1.0, middle_flex: 1.0, ring_flex: 1.0}, roll: 0}
-  spidey:     {fingers: {default: 0.0, index_extend: 0.5, pinky_extend: 0.5, thumb_extend: 0.5, middle_flex: 1.0, ring_flex: 1.0}, roll: 0}
-  finger_gun: {fingers: {default: 0.0, index_extend: 0.5, thumb_extend: 0.6, middle_flex: 1.0, ring_flex: 1.0, pinky_flex: 1.0}, roll: 0}
-  ok:         {fingers: {default: 0.0, thumb_flex: 0.7, index_flex: 0.7, thumb_adduct: 0.5}, roll: 0}
+  # looks like: index + middle straight (a V), ring + pinky curled, thumb tucked over them
+  peace:      {fingers: {default: 0.0, ring_flex: 0.85, pinky_flex: 0.85, thumb_flex: 0.6, thumb_adduct: 0.6}, roll: 0}
+  # looks like: index + pinky straight (horns), middle + ring curled, thumb over them
+  rock_on:    {fingers: {default: 0.0, middle_flex: 0.85, ring_flex: 0.85, thumb_flex: 0.6, thumb_adduct: 0.6}, roll: 0}
+  # looks like: thumb + pinky straight, the middle three curled
+  shaka:      {fingers: {default: 0.0, index_flex: 0.85, middle_flex: 0.85, ring_flex: 0.85}, roll: 0}
+  # looks like: thumb, index + pinky straight; middle + ring curled (web-shooter)
+  spidey:     {fingers: {default: 0.0, middle_flex: 0.85, ring_flex: 0.85}, roll: 0}
+  # looks like: index straight, thumb up, other three curled
+  finger_gun: {fingers: {default: 0.0, middle_flex: 0.85, ring_flex: 0.85, pinky_flex: 0.85}, roll: 0}
+  # looks like: thumb and index tips meet in a ring, other three straight
+  ok:         {fingers: {default: 0.0, thumb_flex: 0.55, index_flex: 0.55, thumb_adduct: 0.4}, roll: 0}

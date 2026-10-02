@@ -1,7 +1,11 @@
 # Grasps.
 
 poses:
-  pinch:       {fingers: {default: 0.0, thumb_flex: 0.8, index_flex: 0.8, thumb_adduct: 0.6, index_adduct: 0.6}, roll: 0}
-  claw:        {fingers: {default: 0.0, flex: 0.5}, roll: 0}
-  tripod:      {fingers: {default: 0.0, thumb_flex: 0.7, index_flex: 0.7, middle_flex: 0.7, thumb_adduct: 0.5}, roll: 0}
-  cross_thumb: {fingers: {default: 0.0, flex: 1.0, thumb_adduct: 0.8}, roll: 0}
+  # looks like: thumb and index closing on each other, pulled together sideways
+  pinch:       {fingers: {default: 0.0, thumb_flex: 0.7, index_flex: 0.7, thumb_adduct: 0.5, index_adduct: 0.5}, roll: 0}
+  # looks like: every finger half-curled, like holding a ball
+  claw:        {fingers: {default: 0.0, flex: 0.45}, roll: 0}
+  # looks like: thumb, index and middle closing on a point
+  tripod:      {fingers: {default: 0.0, thumb_flex: 0.6, index_flex: 0.6, middle_flex: 0.6, thumb_adduct: 0.4}, roll: 0}
+  # looks like: a fist with the thumb pulled hard across the palm
+  cross_thumb: {fingers: {default: 0.0, flex: 0.85, thumb_adduct: 0.7}, roll: 0}

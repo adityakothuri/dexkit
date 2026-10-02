@@ -78,12 +78,29 @@ def pose_files(path: str | Path | None = None) -> list[Path]:
     return files
 
 
+def _looks_like_lines(p: Path) -> dict[str, str]:
+    """'# looks like: ...' comment immediately above a pose entry -> {pose: text}."""
+    out: dict[str, str] = {}
+    pending: str | None = None
+    for line in p.read_text().splitlines():
+        s = line.strip()
+        if s.lower().startswith("# looks like:"):
+            pending = s[len("# looks like:"):].strip()
+        elif pending and s and not s.startswith("#") and ":" in s and not s.startswith("poses:"):
+            out[s.split(":", 1)[0].strip()] = pending
+            pending = None
+        elif not s:
+            pending = None
+    return out
+
+
 class PoseLibrary:
     def __init__(self, poses: dict[str, Pose], path: Path | None = None,
                  sources: dict[str, str] | None = None) -> None:
         self.poses = poses
         self.path = path  # where saves go
         self.sources = sources or {}  # pose name -> file stem ("basic", "digits", "generated", ...)
+        self.descriptions: dict[str, str] = {}  # pose name -> its "# looks like:" line
 
     @classmethod
     def load(cls, hand_cfg: HandConfig, path: str | Path | None = None) -> PoseLibrary:
@@ -93,7 +110,9 @@ class PoseLibrary:
         roles = [s.role for s in hand_cfg.servos]
         poses: dict[str, Pose] = {}
         sources: dict[str, str] = {}
+        descriptions: dict[str, str] = {}
         for p in files:
+            descriptions.update(_looks_like_lines(p))
             data = load_yaml(p).get("poses") or {}
             for name, d in data.items():
                 if name in poses:
@@ -118,7 +137,9 @@ class PoseLibrary:
             save_to = Path(path)
         else:
             save_to = (Path(path) if path is not None else config_dir() / POSES_DIRNAME) / CUSTOM_FILE
-        return cls(poses, save_to, sources)
+        lib = cls(poses, save_to, sources)
+        lib.descriptions = descriptions
+        return lib
 
     def __contains__(self, name: str) -> bool:
         return name in self.poses
@@ -130,6 +151,13 @@ class PoseLibrary:
 
     def names(self) -> list[str]:
         return sorted(self.poses)
+
+    def file_for(self, name: str) -> Path:
+        """The file a pose should be saved into: where it came from, or the custom file."""
+        src = self.sources.get(name)
+        if src and src != "generated" and self.path is not None:
+            return self.path.parent / f"{src}.yaml"
+        return self.path if self.path is not None else config_dir() / POSES_DIRNAME / CUSTOM_FILE
 
     def save_pose(self, name: str, pose: Pose, path: str | Path | None = None) -> None:
         """Write one pose into the custom file (config/poses/custom.yaml), keeping the others as written."""
@@ -370,6 +398,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--list", action="store_true", help="list known poses and exit")
     p.add_argument("--hold", type=float, default=2.0,
                    help="seconds to hold the pose before relaxing and exiting (one-shot mode)")
+    p.add_argument("--review", action="store_true",
+                   help="step through every pose slowly, printing what it should look like; Enter = next, "
+                        "t = tune it by eye (keys 1-7, [ ], v save), q = quit. SPACE = e-stop")
     p.add_argument("--gantry", action="store_true",
                    help="interactive mode: also connect the gantry (where / jog / zero / goto)")
     p.add_argument("--restore-zero", action="store_true",
@@ -394,9 +425,17 @@ def main(argv: list[str] | None = None) -> None:
         p.error(f"unknown pose '{args.name}'. Known: {', '.join(lib.names())}")
     mode = "minjerk" if args.minjerk else "linear"
 
+    if args.review:
+        args.no_gantry = True
+        if args.speed_scale == 1.0:
+            args.speed_scale = 0.5
+        args.max_torque = "tune"
     try:
         with open_session(args, need_hand=True, need_gantry=bool(args.gantry and not args.name)) as s:
             assert s.hand is not None and s.hand_cfg is not None
+            if args.review:
+                review(s, lib, mode)
+                return
             if not args.name:
                 interactive(s.hand, lib, s.hand_cfg.rate_hz, args.duration, mode, s.estop, gantry=s.gantry)
                 return
@@ -411,6 +450,38 @@ def main(argv: list[str] | None = None) -> None:
     except EStopTripped as e:
         print(f"\nEMERGENCY STOP: {e}. Hand relaxed. Restart dexkit-pose to continue.")
         sys.exit(3)
+
+
+def review(s: object, lib: PoseLibrary, mode: str, read: Callable[[str], str] = input) -> None:
+    """Walk through every pose from the files (not the generated ones), slowly, with its description."""
+    from dexkit.cli import Session
+    from dexkit.control.teleop import TerminalKeys, run_teleop
+
+    assert isinstance(s, Session) and s.hand is not None and s.hand_cfg is not None
+    names = [n for n in lib.names() if lib.sources.get(n) != "generated"]
+    print(f"REVIEW: {len(names)} poses. Enter = next, t = tune this one, q = quit, SPACE = e-stop while moving\n")
+    for n in names:
+        print(f"--- {n}  [{lib.sources.get(n)}.yaml]")
+        print(f"    should look like: {lib.descriptions.get(n, '(no description)')}")
+        with SpaceWatch(s.estop):
+            go_to_pose(s.hand, lib[n], 2.0, s.hand_cfg.rate_hz, mode, estop=s.estop)
+        while True:
+            try:
+                ans = read("    [Enter] next   t tune   q quit > ").strip().lower()
+            except EOFError:
+                ans = "q"
+            if ans == "t":
+                run_teleop(s, TerminalKeys(), tune=n)
+                lib = PoseLibrary.load(s.hand_cfg)  # pick up the saved values
+                break
+            if ans == "q":
+                with SpaceWatch(s.estop):
+                    go_to_pose(s.hand, lib["relax"], 2.0, s.hand_cfg.rate_hz, mode, estop=s.estop)
+                return
+            break
+    with SpaceWatch(s.estop):
+        go_to_pose(s.hand, lib["relax"], 2.0, s.hand_cfg.rate_hz, mode, estop=s.estop)
+    print("review done; hand released")
 
 
 def _finish_one_shot(s: object, args: object, t0: float) -> None:

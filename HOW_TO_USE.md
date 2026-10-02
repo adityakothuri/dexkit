@@ -323,6 +323,15 @@ The gantry must be zeroed first (Way 1 or Way 2), or answer `y` to "Restore save
 
 One servo = one movement. Winding its tendon (value 1.0) contracts the finger; unwinding (0.0) releases it and the foam springs it back. There is no separate "extend" motor in use: the five `*_extend` servos are switched off in `config/hand.yaml` (`enabled: false`), stay torque-free, and are never commanded. To bring one back, set its `enabled: true`.
 
+## Fixing poses that don't look right
+
+Every pose value is a fraction of a tendon's range from *open* to its *curl limit*, so if those two points are wrong, every pose is wrong. Do these in order, once:
+
+1. `dexkit-relax --unwind`: the motors unwind; press any key the moment the hand looks open (or a number key to stop one tendon). That sets *open*.
+2. `dexkit-calibrate-hand --tight-only`: each driven tendon winds slowly from open; press `t` at a firm, unstrained curl. That sets the *curl limit* (1.0). `x` skips a tendon, SPACE stops everything.
+3. `dexkit-pose --review`: steps through every pose slowly and prints what it should look like. Enter = next, `q` = quit, `t` = fix this one by eye:
+4. the tuner (`dexkit-teleop --tune NAME` on its own): `1`–`7` pick a tendon, `[` / `]` nudge it and the hand moves, `0` zero it, `o` release all, `,` / `.` wrist, **`v` saves** the pose into its file, `n` / `p` next / previous pose, Esc quits. It runs at half speed and capped torque so a wrong value can't strain anything.
+
 ## The pose library
 
 Poses live in `config/poses/`, one file per group, and every file in that folder is loaded:

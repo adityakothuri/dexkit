@@ -170,7 +170,8 @@ class HandDefaults:
     accel: int = 20  # servo acceleration register (reg 41); lower = gentler
     speed: int = 800  # servo speed register (reg 46), ticks/s (~1 turn per 5 s). 1500 strained the tendons
     torque_limit: int = 600
-    goal_torque: int = 600
+    goal_torque: int = 450  # 0..1000; every curl limit was reached at 300 during calibration
+    tune_torque: int = 400  # cap while tuning poses by eye (dexkit-teleop --tune)
     calib_torque_limit: int = 300
     calib_step_ticks: int = 40
     calib_max_travel_ticks: int = 3 * TICKS_PER_REV  # give up finding 'tight' after this much travel

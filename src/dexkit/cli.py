@@ -98,6 +98,8 @@ def open_session(
         if need_hand:
             s.hand_cfg = load_hand_config()
             apply_speed_scale(s.hand_cfg, getattr(args, "speed_scale", 1.0))
+            if getattr(args, "max_torque", None) == "tune":
+                s.hand_cfg.defaults.goal_torque = min(s.hand_cfg.defaults.goal_torque, s.hand_cfg.defaults.tune_torque)
             if require_calibration and not mock and not s.hand_cfg.is_calibrated:
                 raise SafetyTrip(f"{s.hand_cfg.source}: servos {s.hand_cfg.uncalibrated_ids} are not calibrated; "
                                  "run dexkit-calibrate-hand (it skips the ones already done)")

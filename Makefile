@@ -55,6 +55,9 @@ mock-all:
 	  $(BIN)/dexkit-run --mock --yes --mock-speed 5 examples/pick_and_show.yaml; \
 	  $(BIN)/dexkit-run --mock --yes --loop 2 examples/finger_ripple.yaml; \
 	  $(BIN)/dexkit-run --mock --yes examples/show_off.yaml; \
+	  $(BIN)/dexkit-calibrate-hand --mock --scripted --tight-only --trust-current --only pinky_flex; \
+	  $(BIN)/dexkit-teleop --mock --yes --tune fist --duration 4 --script "0.5:1,1:],2:v,3:esc"; \
+	  printf 'q\n' | $(BIN)/dexkit-pose --mock --yes --review; \
 	  $(BIN)/dexkit-relax --mock --yes; \
 	  $(BIN)/dexkit-estop --mock; \
 	  echo "mock-all: every CLI OK"'

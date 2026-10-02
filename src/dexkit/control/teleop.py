@@ -37,6 +37,13 @@ POSE_KEYS = {"o": "open", "f": "fist", "p": "pinch"}
 FINGER_STEP = 0.05
 ROLL_STEP = 5.0
 
+TUNE_HELP = """POSE TUNER (slow, low torque). Watch the hand and nudge one tendon at a time.
+  1-7      pick a driven tendon          [ / ]   -/+ 0.05 on it (moves immediately)
+  0        set it to 0                   o       release everything
+  , / .    wrist roll -/+ 5 deg          v       SAVE the pose (into its own file)
+  n / p    next / previous pose          Space   EMERGENCY STOP      Esc  quit
+"""
+
 
 @dataclass
 class KeyEvent:
@@ -184,6 +191,7 @@ class TeleopController:
         estop: EStop,
         recorder: Recorder | None = None,
         on_record_stop: Callable[[Recorder], None] | None = None,
+        tune: str | None = None,
     ) -> None:
         self.hand = hand
         self.gantry = gantry
@@ -203,6 +211,17 @@ class TeleopController:
         self.gantry_xyz = np.zeros(3)
         self.gantry_status = "-"
         self.last_saved: str | None = None
+        # Tune mode: keys 1..7 pick the DRIVEN tendons only; v saves to the pose; n/p cycle poses.
+        self.tune = tune
+        self.driven = [i for i, s in enumerate(hand_cfg.servos) if s.enabled]
+        self.tune_names = [n for n in poses.names() if poses.sources.get(n) != "generated"]
+        if tune is not None:
+            self.selected = self.driven[0] if self.driven else 0
+            self.goto_pose(tune, 2.0)
+
+    def goto_pose(self, name: str, duration: float = 1.0) -> None:
+        self._traj = pose_trajectory(Pose(self.fingers, self.roll), self.poses[name], duration, self.hand_cfg.rate_hz)
+        self.message = f"pose {name}"
 
     def handle(self, ev: KeyEvent) -> None:
         k = ev.key
@@ -228,6 +247,8 @@ class TeleopController:
             log.warning(self.message)
 
     def _handle_press(self, k: str) -> None:
+        if self.tune is not None and self._handle_tune_key(k):
+            return
         if k in FINGER_KEYS:
             self.selected = FINGER_KEYS[k]
             self.message = f"selected {self.hand_cfg.servos[self.selected].name}"
@@ -272,6 +293,34 @@ class TeleopController:
                 self.recorder.start()
                 self.message = "recording..."
 
+    def _handle_tune_key(self, k: str) -> bool:
+        """Keys that differ in tune mode. Returns True if handled."""
+        if k.isdigit() and 1 <= int(k) <= len(self.driven):
+            self.selected = self.driven[int(k) - 1]
+            self.message = f"selected {self.hand_cfg.servos[self.selected].name}"
+        elif k == "0":
+            self._traj = []
+            self.fingers[self.selected] = 0.0
+            self.message = f"{self.hand_cfg.servos[self.selected].name} = 0"
+        elif k == "o":
+            self._traj = pose_trajectory(Pose(self.fingers, self.roll), Pose(np.zeros(N_FINGERS), 0.0), 1.5,
+                                         self.hand_cfg.rate_hz)
+            self.message = "all released"
+        elif k == "v":
+            assert self.tune is not None
+            self.poses.save_pose(self.tune, Pose(self.fingers.copy(), self.roll), self.poses.file_for(self.tune))
+            self.last_saved = self.tune
+            self.message = f"saved '{self.tune}' to {self.poses.sources.get(self.tune)}.yaml"
+        elif k in ("n", "p") and self.tune_names:
+            i = self.tune_names.index(self.tune) if self.tune in self.tune_names else -1
+            self.tune = self.tune_names[(i + (1 if k == "n" else -1)) % len(self.tune_names)]
+            self.goto_pose(self.tune, 2.0)
+        elif k in POSE_KEYS or k == "r" or k.lower() in JOG_KEYS or k in ("z", "h"):
+            self.message = "not in tune mode (keys: 1-7 pick, [ ] adjust, 0 zero, o release all, v save, n/p pose)"
+        else:
+            return False
+        return True
+
     def tick(self, poll_gantry: bool) -> np.ndarray:
         """Advance pose animation, command the hand, return the 16-dim action sent."""
         self.estop.check()
@@ -289,10 +338,17 @@ class TeleopController:
 def status_text(c: TeleopController, hs: object, loop_ms: float) -> str:
     names = c.hand_cfg.names
     cells = []
-    for i in range(N_FINGERS):
-        mark = ">" if i == c.selected else " "
-        cells.append(f"{mark}{i + 1:>2} {names[i][:11]:<11} {c.fingers[i]:.2f}")
-    rows = ["   ".join(cells[j : j + 4]) for j in range(0, N_FINGERS, 4)]
+    if c.tune is not None:
+        for n, i in enumerate(c.driven, start=1):
+            mark = ">" if i == c.selected else " "
+            cells.append(f"{mark}{n} {names[i]:<13} {c.fingers[i]:.2f}")
+        rows = [f"TUNING '{c.tune}'   [ ] adjust   0 zero   o release all   v save   n/p next/prev pose   Esc quit"]
+        rows += ["   ".join(cells[j : j + 4]) for j in range(0, len(cells), 4)]
+    else:
+        for i in range(N_FINGERS):
+            mark = ">" if i == c.selected else " "
+            cells.append(f"{mark}{i + 1:>2} {names[i][:11]:<11} {c.fingers[i]:.2f}")
+        rows = ["   ".join(cells[j : j + 4]) for j in range(0, N_FINGERS, 4)]
     v = getattr(hs, "min_voltage", None)
     rec = "REC" if c.recorder.active else "   "
     lines = rows + [
@@ -311,6 +367,7 @@ def run_teleop(
     on_record_stop: Callable[[Recorder], None] | None = None,
     live: bool = True,
     recorder: Recorder | None = None,
+    tune: str | None = None,
 ) -> TeleopController:
     from dexkit.cli import Session
 
@@ -318,7 +375,7 @@ def run_teleop(
     s = session
     poses = PoseLibrary.load(s.hand_cfg)
     c = TeleopController(s.hand, s.gantry, s.hand_cfg, s.gantry_cfg, poses, s.estop,
-                         recorder=recorder, on_record_stop=on_record_stop)
+                         recorder=recorder, on_record_stop=on_record_stop, tune=tune)
     rate_hz = s.hand_cfg.rate_hz
     rate = Rate(rate_hz)
     gantry_every = max(1, int(round(rate_hz / (s.gantry_cfg.status_hz if s.gantry_cfg else 10))))
@@ -385,16 +442,29 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--keys", choices=["auto", "terminal", "pynput", "none"], default="auto")
     p.add_argument("--script", help="scripted keys 't:key,...' e.g. '0.5:3,1:],2:w,3:f,9:esc'")
     p.add_argument("--duration", type=float, default=None, help="quit after N seconds")
+    p.add_argument("--tune", metavar="POSE", help="pose tuner: start at POSE, adjust the driven tendons by eye, "
+                   "v saves back to the pose's file (slow, low torque, hand only)")
     args = p.parse_args(argv)
     init(args)
+    if args.tune:
+        args.no_gantry = True
+        if args.speed_scale == 1.0:
+            args.speed_scale = 0.5
+        args.max_torque = "tune"  # open_session caps goal torque at defaults.tune_torque
     with open_session(args, need_hand=True, want_gantry=True) as s:
-        print(__doc__)
+        if args.tune:
+            lib = PoseLibrary.load(s.hand_cfg)
+            if args.tune not in lib:
+                raise SystemExit(f"unknown pose '{args.tune}'. Known: {', '.join(lib.names())}")
+            print(TUNE_HELP)
+        else:
+            print(__doc__)
         keys = make_keys(args.keys, args.script)  # after the 'go' prompt: cbreak mode eats line input
-        c = run_teleop(s, keys, duration=args.duration)
+        c = run_teleop(s, keys, duration=args.duration, tune=args.tune)
         if s.estop.tripped:
             print(f"e-stop was tripped: {s.estop.reason}")
         if c.last_saved:
-            print(f"last recording: {c.last_saved}")
+            print(f"saved pose '{c.last_saved}'" if args.tune else f"last recording: {c.last_saved}")
 
 
 if __name__ == "__main__":

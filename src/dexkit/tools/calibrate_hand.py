@@ -141,6 +141,29 @@ def capture_servo(
         ui.end_keys()
 
 
+def capture_tight_from_open(
+    d: FeetechDriver, sid: int, name: str, cfg: HandConfig, ui: Prompter, open_pos: int,
+    step_delay: float = 0.08, direction: int = 1,
+) -> dict | None:
+    """Re-set only the curl limit: `open` is already known and trusted, so start there, wind
+    slowly until the operator presses t, and return to open."""
+    defaults = cfg.defaults
+    ui.say(f"\n=== {name} (servo {sid}): curl limit from its open position {open_pos} ===")
+    d.set_torque_limit(sid, defaults.calib_torque_limit)
+    d.set_goal_torque(sid, defaults.calib_torque_limit)
+    d.set_accel(sid, defaults.accel)
+    d.set_speed(sid, defaults.speed)
+    d.write_position(sid, open_pos)
+    d.set_torque(sid, True)
+    ui.wait_enter("  Winding will start slowly from open; press t at a FIRM, unstrained curl "
+                  "(u back up, f faster, s slower, x skip, SPACE = e-stop)")
+    ui.begin_keys()
+    try:
+        return _step_to_tight(d, sid, open_pos, cfg, ui, step_delay, direction, open_pos, [])
+    finally:
+        ui.end_keys()
+
+
 def _step_to_tight(d: FeetechDriver, sid: int, slack: int, cfg: HandConfig, ui: Prompter, step_delay: float,
                    direction: int, goal: int, history: list[int]) -> dict | None:
     defaults = cfg.defaults
@@ -196,6 +219,67 @@ def _step_to_tight(d: FeetechDriver, sid: int, slack: int, cfg: HandConfig, ui: 
     return {"slack": int(slack), "tight": int(tight), "inverted": bool(inverted), "stall_load": stall}
 
 
+def tight_only(args: argparse.Namespace, cfg: HandConfig, raw: dict, out: Path, ui: Prompter,
+               step_delay: float) -> None:
+    """--tight-only: connect like a normal session (so open positions are restored), then re-capture
+    each driven tendon's curl limit from that open and write hand.yaml + the position memory."""
+    from dexkit.hw.feetech_hand import save_positions_state
+
+    if args.mock:
+        from dexkit.hw.mock import MockHand
+
+        hand = MockHand(cfg)
+    else:
+        from dexkit.hw.feetech_hand import FeetechHand
+
+        hand = FeetechHand(cfg)
+    hand.connect()
+    assert hand.driver is not None
+    chosen = [s for s in cfg.servos if s.enabled and (not args.only or s.name in args.only.split(","))]
+    if not chosen:
+        print(f"no driven tendon matches --only {args.only}")
+        sys.exit(2)
+    untrusted = [s.name for s in chosen if s.name in hand.restore_report.get("assumed", [])]
+    if untrusted and not args.trust_current:
+        hand.close()
+        print(f"open position not trusted for {untrusted}: run `dexkit-relax --unwind` first, "
+              "or pass --trust-current to take where they are now as open")
+        sys.exit(2)
+    by_id = {s["id"]: s for s in raw["servos"]}
+    captured: list[int] = []
+    try:
+        for s in chosen:
+            i = cfg.servos.index(s)
+            open_pos = int(hand._slack[i])
+            direction = 1 if s.span >= 0 else -1
+            result = capture_tight_from_open(hand.driver, s.id, s.name, cfg, ui, open_pos,
+                                             step_delay=step_delay, direction=direction)
+            if result:
+                old = abs(s.span)
+                by_id[s.id].update(result, calibrated=True)
+                captured.append(s.id)
+                print(f"  {s.name}: span {old} -> {abs(result['tight'] - result['slack'])} ticks")
+    except EStopTripped as e:
+        print(f"\nEMERGENCY STOP: {e}. Nothing written. Restart to continue.")
+        sys.exit(3)
+    except SafetyTrip as e:
+        print(f"SAFETY: {e}")
+        sys.exit(1)
+    finally:
+        hand.close()
+    if not captured:
+        print("nothing captured; hand.yaml unchanged")
+        return
+    raw["calibrated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    hand_config_from_dict(raw)
+    shutil.copy(out, out.with_suffix(".yaml.bak")) if out.exists() else None
+    dump_yaml(raw, out, header=HEADER)
+    save_positions_state({sid: {"pos": by_id[sid]["slack"], "slack": by_id[sid]["slack"]} for sid in captured})
+    final = load_hand_config(out)
+    print(f"\nwrote {out}: curl limits re-set for {[by_id[s]['name'] for s in captured]}")
+    print_wiring(final)
+
+
 def apply_label(entry: dict, name: str, finger: str | None) -> None:
     entry["name"] = name
     if name in TENDONS:
@@ -235,6 +319,12 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--name", help="with --servo: the tendon this channel drives, e.g. pinky_flex, index_extend, "
                    "thumb_adduct (canonical names set finger/role automatically)")
     p.add_argument("--finger", help="with --servo and a non-canonical --name: its finger group")
+    p.add_argument("--tight-only", action="store_true",
+                   help="re-set only each driven tendon's curl limit, starting from its trusted open "
+                        "position (set by dexkit-relax --unwind); no 'relax the finger' step")
+    p.add_argument("--only", help="with --tight-only: comma-separated tendon names (default: all driven)")
+    p.add_argument("--trust-current", action="store_true",
+                   help="with --tight-only: take the current positions as open even if not restored")
     p.add_argument("--label-only", action="store_true",
                    help="with --servo and --name: just write the label, do not touch the servo")
     p.add_argument("--wiring", action="store_true", help="print the channel -> tendon table and exit")
@@ -288,6 +378,15 @@ def main(argv: list[str] | None = None) -> None:
         print_wiring(load_hand_config(out))
         return
 
+    ui: Prompter = ScriptedPrompter() if args.scripted else Prompter()
+    step_delay = 0.0 if args.scripted else 0.08
+    if args.step_ticks is None and args.tight_only:
+        cfg.defaults.calib_step_ticks = 20  # slower: we are looking for the limit, not taking up slack
+
+    if args.tight_only:
+        tight_only(args, cfg, raw, out, ui, step_delay)
+        return
+
     if args.mock:
         from dexkit.hw.mock import MockFeetechSerial, mock_servos_for
 
@@ -295,8 +394,6 @@ def main(argv: list[str] | None = None) -> None:
     else:
         transport = open_serial(cfg.port, cfg.baud, cfg.timeout_s)
     d = FeetechDriver(FeetechBus(transport, timeout_s=cfg.timeout_s), cfg.register_map())
-    ui: Prompter = ScriptedPrompter() if args.scripted else Prompter()
-    step_delay = 0.0 if args.scripted else 0.08
 
     try:
         missing = [sid for sid in cfg.ids if d.ping(sid) is None]

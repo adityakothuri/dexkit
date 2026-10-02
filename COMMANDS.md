@@ -29,6 +29,15 @@ Run commands from a normal Terminal window (they ask you to type `go` before any
 
 Options every command takes: `--speed-scale 0.5` (slower), `--mock` (simulate), `--yes` (skip `go`), `-v` (debug).
 
+## Fixing a pose (in this order)
+
+| step | command | what you do |
+|---|---|---|
+| 1. set open | `dexkit-relax --unwind` | motors unwind; press a key when every finger looks open (number keys stop single tendons) |
+| 2. set curl limits | `dexkit-calibrate-hand --tight-only` | each driven tendon winds slowly from open; press `t` at a firm, unstrained curl (`x` skip, SPACE stop). Add `--only ring_flex` for one tendon |
+| 3. review | `dexkit-pose --review` | every pose in turn, slowly, with its "should look like" line. Enter = next, `t` = tune it, `q` = quit |
+| 4. tune | `dexkit-teleop --tune peace` | keys `1`–`7` pick a tendon, `[`/`]` nudge it, `0` zero, `o` release all, `,`/`.` wrist, **`v` saves** into the pose's file, `n`/`p` next/previous pose, Esc quit. Slow and low-torque |
+
 ## Routines (`examples/`)
 
 | file | does |

@@ -223,3 +223,78 @@ def test_rehome_overrides_restored_open(hand_cfg):
     assert h._slack[0] == cfg.servos[0].slack + 300
     assert load_positions_state()["servos"][str(cfg.servos[0].id)]["slack"] == cfg.servos[0].slack + 300
     h.close()
+
+
+def test_tight_only_recaptures_curl_limit_from_trusted_open(hand_cfg, tmp_path, monkeypatch):
+    """--tight-only: open stays where it is, tight = open + travel, state file updated."""
+    import argparse
+
+    from dexkit.config import dump_yaml, load_hand_config, load_yaml
+    from dexkit.hw.feetech_hand import load_positions_state, save_positions_state
+    from dexkit.tools.calibrate_hand import ScriptedPrompter, tight_only
+
+    cfg = hand_cfg
+    s0 = cfg.servos[0]
+    trusted_open = s0.slack + 300  # the operator set open 300 ticks further in than calibration
+    save_positions_state({s.id: {"pos": (trusted_open if s is s0 else s.slack), "slack": (trusted_open if s is s0 else s.slack)}
+                          for s in cfg.servos}, roll_center=cfg.roll.center)
+    raw = load_yaml(cfg.source)
+    for e, s in zip(raw["servos"], cfg.servos, strict=True):
+        e.update(id=s.id, name=s.name, slack=s.slack, tight=s.tight, inverted=s.inverted, enabled=s.enabled, calibrated=True)
+    raw["roll"]["id"] = cfg.roll.id
+    out = tmp_path / "hand.yaml"
+    dump_yaml(raw, out)
+    args = argparse.Namespace(mock=True, only=s0.name, trust_current=False)
+    # the mock servos start at slack; put servo 0 at its trusted open so the restore is clean
+    import dexkit.hw.mock as mock
+
+    real = mock.mock_servos_for
+    monkeypatch.setattr(mock, "mock_servos_for", lambda c, start_ticks=None: real(c, {s0.id: trusted_open}))
+    tight_only(args, cfg, raw, out, ScriptedPrompter(tight_steps=25), step_delay=0.0)
+    new = load_hand_config(out)
+    n0 = next(s for s in new.servos if s.id == s0.id)
+    assert n0.slack == trusted_open and n0.tight == trusted_open + 25 * cfg.defaults.calib_step_ticks
+    assert load_positions_state()["servos"][str(s0.id)]["slack"] == trusted_open
+    assert next(s for s in new.servos if s.id == cfg.servos[1].id).tight == cfg.servos[1].tight  # untouched
+
+
+def test_tune_mode_saves_into_the_pose_file(hand_cfg, mock_hand, estop, tmp_path):
+    import shutil
+
+    from dexkit.control.poses import PoseLibrary
+    from dexkit.control.teleop import KeyEvent, TeleopController
+
+    d = tmp_path / "poses"
+    shutil.copytree(hand_cfg.source.parent / "poses", d)
+    lib = PoseLibrary.load(hand_cfg, d)
+    c = TeleopController(mock_hand, None, hand_cfg, None, lib, estop, tune="fist")
+    assert c.selected == c.driven[0]
+    for _ in range(60):
+        c.tick(poll_gantry=False)  # arrive at fist
+    c.handle(KeyEvent("2"))  # second driven tendon
+    before = c.fingers[c.selected]
+    c.handle(KeyEvent("["))
+    c.handle(KeyEvent("["))
+    assert c.fingers[c.selected] == pytest.approx(before - 0.1)
+    c.handle(KeyEvent("v"))
+    lib2 = PoseLibrary.load(hand_cfg, d)
+    assert lib2["fist"].fingers[c.selected] == pytest.approx(before - 0.1) and lib2.sources["fist"] == "basic"
+    c.handle(KeyEvent("n"))
+    assert c.tune != "fist" and c._traj  # moved on to the next pose, slowly
+
+
+def test_shipped_poses_use_driven_tendons_and_stay_conservative(hand_cfg):
+    from dexkit.config import REPO_ROOT, load_hand_config
+    from dexkit.control.poses import PoseLibrary
+
+    real = load_hand_config(REPO_ROOT / "config" / "hand.yaml")
+    lib = PoseLibrary.load(real)
+    for n, pose in lib.poses.items():
+        if lib.sources.get(n) == "generated":
+            continue
+        for i, s in enumerate(real.servos):
+            if not s.enabled:
+                assert pose.fingers[i] == 0.0, f"{n} drives disabled {s.name}"
+            elif s.role == "flex":
+                assert pose.fingers[i] <= 0.9, f"{n}: {s.name} {pose.fingers[i]} > 0.9 before tuning"
+        assert n in lib.descriptions, f"{n} has no '# looks like:' line"

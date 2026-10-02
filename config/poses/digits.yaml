@@ -1,13 +1,17 @@
-# Digits for showing numbers (used by examples/team_7503.yaml).
-#   zero  = an O: all fingers curved, thumb pulled in to meet the fingertips
-#   one..five = that many fingers raised, the rest tucked
-#   seven = the glyph: index out, thumb out (an L / 7 shape), rest tucked
+# Digits (used by examples/team_7503.yaml and count_to_five.yaml).
 
 poses:
-  zero:  {fingers: {default: 0.0, flex: 0.55, thumb_flex: 0.5, thumb_adduct: 0.7}, roll: 0}
-  one:   {fingers: {default: 0.0, flex: 1.0, index_flex: 0.0, index_extend: 0.5}, roll: 0}
-  two:   {fingers: {default: 0.0, index_extend: 0.5, middle_extend: 0.5, ring_flex: 1.0, pinky_flex: 1.0, thumb_flex: 0.8, thumb_adduct: 0.5}, roll: 0}
-  three: {fingers: {default: 0.0, index_extend: 0.4, middle_extend: 0.4, ring_extend: 0.4, pinky_flex: 1.0, thumb_flex: 0.8, thumb_adduct: 0.5}, roll: 0}
-  four:  {fingers: {default: 0.0, extend: 0.4, thumb_extend: 0.0, thumb_flex: 0.8, thumb_adduct: 0.6}, roll: 0}
-  five:  {fingers: {default: 0.0, extend: 0.6}, roll: 0}
-  seven: {fingers: {default: 0.0, index_extend: 0.6, thumb_extend: 0.6, middle_flex: 1.0, ring_flex: 1.0, pinky_flex: 1.0}, roll: 0}
+  # looks like: an O: all four fingers curved, thumb tip meeting the fingertips
+  zero:  {fingers: {default: 0.0, flex: 0.5, thumb_flex: 0.4, thumb_adduct: 0.6}, roll: 0}
+  # looks like: index up, rest curled, thumb over them
+  one:   {fingers: {default: 0.0, flex: 0.85, index_flex: 0.0, thumb_flex: 0.5, thumb_adduct: 0.5}, roll: 0}
+  # looks like: index + middle up (same as peace)
+  two:   {fingers: {default: 0.0, ring_flex: 0.85, pinky_flex: 0.85, thumb_flex: 0.6, thumb_adduct: 0.6}, roll: 0}
+  # looks like: index + middle + ring up, pinky curled, thumb over it
+  three: {fingers: {default: 0.0, pinky_flex: 0.85, thumb_flex: 0.6, thumb_adduct: 0.6}, roll: 0}
+  # looks like: four fingers up, thumb folded across the palm
+  four:  {fingers: {default: 0.0, thumb_flex: 0.6, thumb_adduct: 0.6}, roll: 0}
+  # looks like: the whole open hand
+  five:  {fingers: {default: 0.0}, roll: 0}
+  # looks like: the glyph 7: index and thumb out (an L), the other three curled
+  seven: {fingers: {default: 0.0, middle_flex: 0.85, ring_flex: 0.85, pinky_flex: 0.85}, roll: 0}

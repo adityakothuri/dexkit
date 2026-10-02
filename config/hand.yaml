@@ -40,6 +40,6 @@ servos:
 - {id: 11, name: pinky_extend, finger: pinky, slack: 2780, tight: 4052, inverted: false, max_delta_ticks: 80, stall_load: 400,
   calibrated: true, role: extend, enabled: false}
 roll: {id: 12, model: HLS3640M, center: 1465, range_deg: 90, inverted: false, max_delta_ticks: 80, calibrated: true}
-defaults: {accel: 20, speed: 800, torque_limit: 600, goal_torque: 600, calib_torque_limit: 300, calib_step_ticks: 40, calib_max_travel_ticks: 12288,
+defaults: {accel: 20, speed: 800, torque_limit: 600, goal_torque: 450, tune_torque: 400, calib_torque_limit: 300, calib_step_ticks: 40, calib_max_travel_ticks: 12288,
   calib_direction: 1, stall_load_factor: 1.5, stall_load_floor: 650, stall_time_s: 0.5, stall_backoff: 0.05, antagonist_payout: 1.0,
   antagonist_payout_max_ticks: 1000}

@@ -163,6 +163,18 @@ if the residual drift exceeds RESTORE_DRIFT_TICKS (1024) the finger falls back t
 current = open and is listed on the checklist (`home` fixes it). The old behaviour is the
 fallback only.
 
+## Pose audit tooling (2026-10-02, night)
+
+Poses looked wrong (over-curl/strain, wrong thumb, open not straight) because pose values
+are fractions of [open, tight] and the original spans included slack take-up, while open
+had since been re-set with --unwind to a taut position: tight = open + old span overshot.
+Now: `dexkit-calibrate-hand --tight-only` re-captures tight from the trusted open
+(`capture_tight_from_open`, `tight_only`); `dexkit-teleop --tune POSE` is a live tuner
+(`TeleopController(tune=...)`, keys 1-7 on driven tendons, v saves via
+`PoseLibrary.file_for`); `dexkit-pose --review` walks every pose with its
+`# looks like:` line (`PoseLibrary.descriptions`). Pose files rewritten for the 7 driven
+tendons, flexors <= 0.85 until tuned. goal_torque 600 -> 450, tune_torque 400.
+
 ## Hardware notes
 
 - The hand can be calibrated and driven **off the gantry**; hand and gantry configs are

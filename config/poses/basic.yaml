@@ -1,21 +1,26 @@
-# DexKit pose library, one file per group; every *.yaml in this folder is loaded.
-# `fingers` is a list of 12 values in [0,1] (channel order from hand.yaml) or a mapping.
-# Mapping keys, most specific wins: tendon name (thumb_flex, index_extend, ...)
-# > finger (thumb, index, middle, ring, pinky) > role (flex, extend, adduct) > default.
-# 0 = tendon relaxed, 1 = fully pulled (the calibrated limit). A finger's flexor and
-# extensor are antagonists: keep flex + extend <= 1 per finger. `roll` is degrees.
+# DexKit pose library. Every *.yaml in this folder is loaded.
+# One servo = one movement. 0 = tendon released, 1 = its calibrated curl limit.
+# Driven tendons: thumb_flex (thumb to upper palm), index_flex, middle_flex, ring_flex,
+# pinky_flex (curl in), thumb_adduct (thumb across mid-palm), index_adduct (index toward
+# thumb). The *_extend servos are disabled; a raised finger is simply released (0).
+# Keys: tendon name > finger (thumb..pinky) > role (flex/adduct) > default.
+# Each pose has a "looks like" line: that is what to check in `dexkit-pose --review`,
+# and `dexkit-teleop --tune NAME` is how to fix it by eye.
 
 poses:
+  # looks like: every finger straight and relaxed, wrist neutral
   relax:     {fingers: {default: 0.0}, roll: 0}
-  # One servo = one movement: winding (1.0) contracts, unwinding (0.0) releases and the foam
-  # springs the finger back. The *_extend servos are disabled in hand.yaml (enabled: false), so
-  # `extend` values are ignored; open == everything released.
+  # looks like: same as relax (the foam opens the hand by itself)
   open:      {fingers: {default: 0.0}, roll: 0}
-  open_wide: {fingers: {default: 0.0, extend: 0.7}, roll: 0}  # only differs if extensors are re-enabled
-  fist:      {fingers: {default: 0.0, flex: 1.0}, roll: 0}
-  point:     {fingers: {default: 0.0, flex: 1.0, index_flex: 0.0, index_extend: 0.5}, roll: 0}
-  thumbs_up: {fingers: {default: 0.0, flex: 1.0, thumb_flex: 0.0, thumb_extend: 0.5}, roll: 0}
-  wave_a:    {fingers: {default: 0.0, index_flex: 0.4, ring_flex: 0.4}, roll: 20}
-  wave_b:    {fingers: {default: 0.0, middle_flex: 0.4, pinky_flex: 0.4}, roll: -20}
+  # looks like: all five fingers curled into the palm, thumb lying over them
+  fist:      {fingers: {default: 0.0, flex: 0.85, thumb_adduct: 0.4}, roll: 0}
+  # looks like: index straight, the other three curled, thumb over them
+  point:     {fingers: {default: 0.0, flex: 0.85, index_flex: 0.0, thumb_flex: 0.5, thumb_adduct: 0.5}, roll: 0}
+  # looks like: four fingers curled, thumb straight up
+  thumbs_up: {fingers: {default: 0.0, flex: 0.85, thumb_flex: 0.0}, roll: 0}
+  # looks like: a loose hand (index + ring slightly curled), wrist turned +20
+  wave_a:    {fingers: {default: 0.0, index_flex: 0.3, ring_flex: 0.3}, roll: 20}
+  # looks like: a loose hand (middle + pinky slightly curled), wrist turned -20
+  wave_b:    {fingers: {default: 0.0, middle_flex: 0.3, pinky_flex: 0.3}, roll: -20}
 # Generated automatically: finger_1_curl .. finger_12_curl (channel N-1 at 1.0) and one
 # <tendon>_only pose per tendon (e.g. pinky_flex_only), for choreography.
