@@ -54,7 +54,7 @@ dexkit-calibrate-hand --servo 3
 ```
 Press **Enter**. Press **Enter** again. The motor winds. Watch the hand and decide: which finger, and does it curl in, bend back, or go sideways?
 
-Type **`x`**, press **Enter**. The motor stops. Nothing is saved.
+Press **`x`**. The motor stops. Nothing is saved.
 
 ### Step 2: run it again with its name
 ```bash
@@ -66,11 +66,11 @@ dexkit-calibrate-hand --servo 3 --name index_flex
 It says *put this finger in its RELAXED position*. Leave the finger sitting naturally, not pulled in or back. Press **Enter**.
 
 ### Step 4: second prompt
-It says *press Enter, then t at the fully PULLED pose*. Press **Enter**. The motor winds. When the finger is as far as you ever want it to go (firmly curled / bent back / across, but not straining), type **`t`** and press **Enter**.
+It says *press Enter, then t at the fully PULLED pose*. Press **Enter**. The motor winds. When the finger is as far as you ever want it to go (firmly curled / bent back / across, but not straining), press **`t`**.
 
 Saved. It prints the table. Next motor.
 
-Keys you can type while it winds (then Enter):
+Keys while it winds (no Enter needed):
 
 | key | does |
 |---|---|
@@ -79,6 +79,7 @@ Keys you can type while it winds (then Enter):
 | `r` | reverse direction |
 | `u` | back up a bit |
 | `f` / `s` | faster / slower |
+| **SPACE** | emergency stop: all torque off, exits |
 
 ## The wrist (ID 12)
 ```bash
@@ -108,7 +109,7 @@ dexkit-pose
 | problem | do |
 |---|---|
 | the motor winds but nothing on the hand moves for a while | normal: it's taking up slack. It gives up on its own after 3 turns. |
-| the finger gets looser instead of pulling | `r` + Enter to reverse |
+| the finger gets looser instead of pulling | press `r` to reverse |
 | it stopped by itself ("moved … ticks without 't'") | nothing saved; the tendon may be slack or off its spool. Check it, run the motor again |
 | I pressed `t` in the wrong place | run the same `--servo N --name …` command again; it overwrites |
 | I named it wrong | `--servo N --label-only --name <right name>` |

@@ -65,7 +65,7 @@ make policy-smoke  # synthetic data -> train 2 epochs -> infer 20 steps (GPU: cu
 
 ## Commands
 
-Every command accepts `--mock` (simulated hardware), `--yes` (skip the `go` prompt), `--speed-scale S` (slow the hand down uniformly) and `-v` (debug logging, including serial bytes).
+Every command accepts `--mock` (simulated hardware), `--yes` (skip the `go` prompt), `--speed-scale S` (slow the hand down uniformly) and `-v` (debug logging, including serial bytes). **SPACE is the emergency stop in every command while anything moves.** See [COMMANDS.md](COMMANDS.md).
 
 | Command | What it does |
 |---|---|
@@ -79,6 +79,7 @@ Every command accepts `--mock` (simulated hardware), `--yes` (skip the `go` prom
 | `dexkit-teleop` | Keyboard teleop with a live status line (keys below). |
 | `dexkit-replay <recording>` | Replay a `data/recordings/*.npz` recording, with a 1 s lead-in. |
 | `dexkit-run <sequence.yaml> [--dry-run] [--loop N]` | Validate every step, then execute the sequence (N times; 0 = until Ctrl+C). Hand-only sequences never open the gantry. See `examples/`. |
+| `dexkit-relax [--now]` | Back to normal: release every tendon, wrist to neutral, torque off (`--now`: torque off without moving). |
 | `dexkit-estop` / `dexkit-estop --clear` | Standalone kill from a second terminal. It sets a flag that stops any running dexkit loop and blocks new sessions until you run `--clear`. |
 | `dexkit-collect`, `dexkit-train`, `dexkit-infer` | The policy layer (Phase 6, see below). |
 | `dexkit-ros-bridge` | Optional ROS 2 bridge on CMU's topic names. |
@@ -165,7 +166,7 @@ Stock 3018 boards usually have no limit switches, so `zeroing: manual` is the de
 | LoadWatch | every state read | A finger above `stall_load` for 0.5 s backs off 5% toward slack |
 | TempWatch | every 2 s | Trips above 65 °C |
 | TravelBox | `move_to`, jogs | Rejects targets outside the box; jogs are clamped to it |
-| EStop | Space, `dexkit-estop`, any trip | GRBL `!`, then 0x85, then 0x18, then torque off; a global flag stops every loop |
+| EStop | SPACE in any command, `dexkit-estop`, any trip | GRBL `!`, then 0x85, then 0x18, then torque off; a global flag stops every loop |
 | Signals | SIGINT, SIGTERM, atexit | Hand relax and gantry feed hold |
 
 Before any motion, every CLI prints a startup checklist and waits for you to type `go`. The checklist covers ports, servo voltages, the calibration timestamp and whether the gantry frame is valid.

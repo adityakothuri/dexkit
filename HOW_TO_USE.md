@@ -153,9 +153,9 @@ Use the name that matches what you saw. The 12 allowed names:
 
 **Step 3. First prompt: "RELAXED position".** Let the finger sit naturally, not pulled in or back. Press **Enter**.
 
-**Step 4. Second prompt: "fully PULLED pose".** Press **Enter** and watch the motor wind the tendon. When the finger is as far as you want it to ever go (firmly curled / bent back / across, but not straining), type **`t`** and press **Enter**. Done: it saves and prints the updated table.
+**Step 4. Second prompt: "fully PULLED pose".** Press **Enter** and watch the motor wind the tendon. When the finger is as far as you want it to ever go (firmly curled / bent back / across, but not straining), press **`t`** (no Enter needed). Done: it saves and prints the updated table. **SPACE** = emergency stop.
 
-Helpful keys while it's winding (each followed by Enter): **`r`** reverse, **`u`** back up a bit, **`f`** faster, **`s`** slower, **`x`** stop without saving.
+Keys while it's winding (no Enter needed): **`r`** reverse, **`u`** back up a bit, **`f`** faster, **`s`** slower, **`x`** stop without saving, **SPACE** emergency stop.
 
 **Already calibrated a motor but didn't name it?** Just label it, no movement:
 ```bash
