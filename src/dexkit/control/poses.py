@@ -164,6 +164,7 @@ INTERACTIVE_HELP = """commands:
   save <name>          save the current commanded pose to poses.yaml
   list                 list poses
   state                print measured finger values, roll, voltage, load
+  home                 torque off, you pull every finger fully open, Enter: that becomes 'open'
   relax                torque off (hand goes limp) and quit
   quit / q             relax and quit"""
 
@@ -242,6 +243,11 @@ def interactive(hand: HandInterface, lib: PoseLibrary, rate_hz: float, duration:
                 st = hand.get_state()
                 print(f"fingers {np.round(st.fingers, 2).tolist()} roll {st.roll_deg:+.1f} "
                       f"V {st.min_voltage} load {st.load}")
+            elif cmd == "home":
+                hand.relax()
+                read("torque OFF. Pull every finger fully OPEN and the wrist to neutral, then press Enter ")
+                hand.rehome()
+                print("re-based: current position is now open / roll 0")
             elif cmd == "save" and len(parts) == 2:
                 f, r = hand.last_command
                 lib.save_pose(parts[1], Pose(f, r))

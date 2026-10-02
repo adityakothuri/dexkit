@@ -2,16 +2,25 @@
 
 Normalized finger values ([0,1], 0 = slack) and roll degrees are converted to
 ticks only here, using hand.yaml.
+
+The servos run in multi-turn mode and LOSE the turn count at power-off (bench:
+22191 read back as 1711 = 22191 mod 4096). So the absolute slack/tight numbers in
+hand.yaml cannot be trusted across sessions; only their difference (the span) is.
+On connect the hand is re-based: each finger's current position becomes "open" (0),
+which is why the operator must leave the fingers relaxed/open before typing `go`.
+The roll servo stays within one turn, so its center is snapped to the equivalent
+angle nearest the current position.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import time
 
 import numpy as np
 
-from dexkit.config import HandConfig
+from dexkit.config import TICKS_PER_REV, HandConfig, RollConfig
 from dexkit.hw.base import N_FINGERS, HandInterface, HandState
 from dexkit.hw.feetech_protocol import (
     BROADCAST_ID,
@@ -166,13 +175,9 @@ class FeetechHand(HandInterface):
         self.voltage_gate = VoltageGate(cfg.voltage_window)
         self.temp_watch = TempWatch(cfg.max_temp_c)
         self.load_watch = LoadWatch([s.stall_load for s in cfg.servos], cfg.defaults.stall_time_s)
-        self.clamp = TickClamp(
-            lo=[s.lo for s in cfg.servos] + [cfg.roll.lo],
-            hi=[s.hi for s in cfg.servos] + [cfg.roll.hi],
-            max_delta=[s.max_delta_ticks for s in cfg.servos] + [cfg.roll.max_delta_ticks],
-        )
-        self._slack = np.array([s.slack for s in cfg.servos], dtype=float)
+        self.roll = cfg.roll  # replaced by a re-based copy on connect
         self._span = np.array([s.span for s in cfg.servos], dtype=float)
+        self._set_slack(np.array([s.slack for s in cfg.servos], dtype=float), cfg.roll)
         self._last_ticks: np.ndarray | None = None
         self._last_cmd: tuple[np.ndarray, float] = (np.zeros(N_FINGERS), 0.0)
         self._load_cap = np.ones(N_FINGERS)
@@ -182,6 +187,43 @@ class FeetechHand(HandInterface):
         self.connected = False
         self.last_loop_ms = 0.0
         self.last_read_ms = 0.0
+
+    # ---------------------------------------------------------------- re-basing
+
+    def _set_slack(self, slack: np.ndarray, roll: RollConfig) -> None:
+        self._slack = np.asarray(slack, dtype=float)
+        self.roll = roll
+        tight = self._slack + self._span
+        self.clamp = TickClamp(
+            lo=np.minimum(self._slack, tight).tolist() + [roll.lo],
+            hi=np.maximum(self._slack, tight).tolist() + [roll.hi],
+            max_delta=[s.max_delta_ticks for s in self.cfg.servos] + [roll.max_delta_ticks],
+        )
+
+    def rebase(self, present: dict[int, int]) -> None:
+        """Current finger positions become 'open'; roll center snaps to its nearest equivalent turn."""
+        slack = np.array([present[s.id] for s in self.cfg.servos], dtype=float)
+        p = present[self.cfg.roll.id]
+        c = self.cfg.roll.center
+        center = p + ((c - p + TICKS_PER_REV // 2) % TICKS_PER_REV) - TICKS_PER_REV // 2
+        self._set_slack(slack, dataclasses.replace(self.cfg.roll, center=int(center)))
+        log.info("hand re-based: open = %s, roll center = %d", slack.astype(int).tolist(), center)
+
+    def rehome(self) -> None:
+        """After the operator has pulled the fingers open with torque off: re-base and hold here."""
+        if self.driver is None:
+            raise RuntimeError("hand not connected")
+        present = self.driver.read_positions(self.ids)
+        if len(present) != len(self.ids):
+            raise SafetyTrip(f"could not read positions from {sorted(set(self.ids) - set(present))}")
+        self.rebase(present)
+        ticks = np.array([present[sid] for sid in self.ids], dtype=np.int64)
+        self.driver.sync_write_positions(dict(zip(self.ids, ticks.tolist(), strict=True)))
+        self.driver.set_torque_all(self.ids, True)
+        self.torque_on = True
+        self._last_ticks = ticks
+        self._load_cap = np.ones(N_FINGERS)
+        self._last_cmd = (np.zeros(N_FINGERS), self.roll.ticks_to_deg(int(ticks[N_FINGERS])))
 
     # ---------------------------------------------------------------- conversions
 
@@ -230,6 +272,7 @@ class FeetechHand(HandInterface):
         present = d.read_positions(self.ids)
         if len(present) != len(self.ids):
             raise SafetyTrip(f"could not read positions from {sorted(set(self.ids) - set(present))}")
+        self.rebase(present)
         ticks = np.array([present[sid] for sid in self.ids], dtype=np.int64)
         # Hold the current position so enabling torque never jumps to a stale goal.
         d.sync_write_positions(dict(zip(self.ids, ticks.tolist(), strict=True)))
@@ -237,7 +280,7 @@ class FeetechHand(HandInterface):
         self.torque_on = True
         self._last_ticks = ticks
         self._last_cmd = (np.clip(self.ticks_to_fingers(ticks[:N_FINGERS]), 0, 1),
-                          self.cfg.roll.ticks_to_deg(int(ticks[N_FINGERS])))
+                          self.roll.ticks_to_deg(int(ticks[N_FINGERS])))
         self._last_voltage_check = time.monotonic()
         self.connected = True
         log.info("hand connected: %d servos, torque on", len(self.ids))
@@ -257,15 +300,15 @@ class FeetechHand(HandInterface):
         if f.shape != (N_FINGERS,):
             raise ValueError(f"fingers must have shape ({N_FINGERS},)")
         f = np.minimum(f, self._load_cap)
-        roll = float(np.clip(roll_deg, -self.cfg.roll.range_deg, self.cfg.roll.range_deg))
-        target = np.append(self.fingers_to_ticks(f), self.cfg.roll.deg_to_ticks(roll))
+        roll = float(np.clip(roll_deg, -self.roll.range_deg, self.roll.range_deg))
+        target = np.append(self.fingers_to_ticks(f), self.roll.deg_to_ticks(roll))
         ticks = self.clamp.apply(target, self._last_ticks)
         t0 = time.perf_counter()
         self.driver.sync_write_positions(dict(zip(self.ids, ticks.tolist(), strict=True)))
         self.last_loop_ms = (time.perf_counter() - t0) * 1000
         self._last_ticks = ticks
         sent = (np.clip(self.ticks_to_fingers(ticks[:N_FINGERS]), 0, 1),
-                self.cfg.roll.ticks_to_deg(int(ticks[N_FINGERS])))
+                self.roll.ticks_to_deg(int(ticks[N_FINGERS])))
         self._last_cmd = sent
         # Release a load cap once the operator commands below it.
         self._load_cap = np.where(np.asarray(fingers) < self._load_cap - 1e-6, 1.0, self._load_cap)
@@ -300,7 +343,7 @@ class FeetechHand(HandInterface):
             [ticks.get(sid, prev.ticks.get(sid, 0) if prev else 0) for sid in self.cfg.finger_ids],
             dtype=float,
         )
-        roll_ticks = ticks.get(self.cfg.roll.id, self.cfg.roll.center)
+        roll_ticks = ticks.get(self.cfg.roll.id, self.roll.center)
 
         if self.torque_on:
             loads = np.array([load.get(sid, 0) for sid in self.cfg.finger_ids], dtype=float)
@@ -312,7 +355,7 @@ class FeetechHand(HandInterface):
 
         state = HandState(
             fingers=self.ticks_to_fingers(finger_ticks),
-            roll_deg=self.cfg.roll.ticks_to_deg(roll_ticks),
+            roll_deg=self.roll.ticks_to_deg(roll_ticks),
             ticks=ticks,
             load=load,
             voltage=voltage,

@@ -43,6 +43,14 @@ shipped with speed register 46 = 100, so goals were followed at a crawl.
 Fixed (2026-10-02): config accepts 15-bit positions (`MAX_TICKS` = 32767),
 `calib_max_travel_ticks` (default 3 turns) replaces the 2,000-tick cap, the 0..4095 stop
 is gone, and calibration sets speed/accel from `defaults` before stepping.
+**Power-cycle finding (verified):** the multi-turn count is lost when the PSU is switched off
+(servo 0 read 22191, then 1711 = 22191 mod 4096 after a cycle). So absolute slack/tight
+values in `hand.yaml` only matter as a *span*. `FeetechHand.connect()` now re-bases: each
+finger's present position becomes open (0) and the roll center snaps to its nearest
+equivalent turn. Operating rule: fingers relaxed/open before `go`; `home` at the pose
+prompt re-bases later. `hand.yaml` carries per-servo `calibrated:` flags; servo 0 is the
+**pinky** (observed), labelled `pinky_1`; the other names are still guesses.
+
 **Not yet re-tested on the hand after the fix.** Next step is literally
 `dexkit-calibrate-hand --servo 0` while watching the thumb: it should now keep winding
 until the finger curls, and `r` reverses if the tendon tightens the other way.

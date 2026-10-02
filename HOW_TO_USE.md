@@ -164,6 +164,8 @@ After this, the gantry refuses to go outside that box. If you skip this step, a 
 
 ## Part B: every session
 
+**Rule for every session: before you type `go`, every finger must be relaxed/open and the wrist in its neutral position.** The motors forget how many turns they've made whenever the power is off, so the software takes "wherever the fingers are right now" as *open* each time it connects. If you connect with a finger half-curled, that finger will never fully open and could over-tighten. Already connected and not sure? Type `home` at the `pose>` prompt: it switches the motors off, lets you pull the fingers open by hand, and re-bases when you press Enter.
+
 ```bash
 cd ~/dexkit
 source .venv/bin/activate
@@ -191,6 +193,7 @@ Type **`go`** at the checklist. You now get a `pose>` prompt and can type any of
 | `roll 30` | twist the wrist to +30° (use `roll -30` for the other way) |
 | `save myname` | save the hand's current shape as a new pose called `myname` |
 | `state` | show where the fingers actually are, plus voltage |
+| `home` | motors off → you pull every finger open → Enter: that becomes *open* again |
 | `help` | show this list |
 | `q` | relax the hand and quit |
 

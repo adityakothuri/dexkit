@@ -81,6 +81,10 @@ class HandInterface(abc.ABC):
     def relax(self) -> None:
         """Torque off on every servo. Must never raise."""
 
+    def rehome(self) -> None:
+        """Re-base after the operator opened the hand with torque off: current pose becomes open."""
+        raise NotImplementedError
+
     @abc.abstractmethod
     def close(self) -> None: ...
 

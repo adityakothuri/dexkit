@@ -220,7 +220,8 @@ def mock_servos_for(cfg: HandConfig, start_ticks: dict[int, int] | None = None) 
         pos = (start_ticks or {}).get(s.id, s.slack)
         servos.append(MockServo(id=s.id, position=float(pos), stall_tick=float(s.effective_tight) + 40,
                                 stall_dir=1 if s.span >= 0 else -1))
-    servos.append(MockServo(id=cfg.roll.id, model=MOCK_MODEL_ROLL, position=float(cfg.roll.center)))
+    roll_pos = (start_ticks or {}).get(cfg.roll.id, cfg.roll.center)
+    servos.append(MockServo(id=cfg.roll.id, model=MOCK_MODEL_ROLL, position=float(roll_pos)))
     return servos
 
 

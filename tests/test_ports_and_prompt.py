@@ -136,3 +136,34 @@ def test_calibration_run_skips_done_servos_and_renames(tmp_path, monkeypatch):
     main(["--mock", "--scripted", "--out", str(out)])  # does the remaining 12, skips servo 3
     cfg = load_hand_config(out)
     assert cfg.is_calibrated and next(s for s in cfg.servos if s.id == 3).name == "ring_x"
+
+
+def test_connect_rebases_to_present_position(hand_cfg):
+    """Servos lose their turn count at power-off; 'open' must be wherever they are at connect."""
+    from dexkit.hw.mock import MockFeetechSerial, MockHand, mock_servos_for
+
+    s0 = hand_cfg.servos[0]
+    start = {s0.id: 1711, hand_cfg.roll.id: hand_cfg.roll.center + 4096 - 100}  # roll one turn up, 100 ticks off
+    h = MockHand(hand_cfg, latency_s=0, bus=MockFeetechSerial(mock_servos_for(hand_cfg, start_ticks=start)))
+    h.connect()
+    for _ in range(12):
+        h.set_targets(np.ones(12), 0.0)
+    assert h.bus_sim.servos[s0.id].goal == 1711 + s0.span          # full curl = present + span
+    assert h.bus_sim.servos[hand_cfg.roll.id].goal == hand_cfg.roll.center + 4096  # roll 0 = nearest equivalent center
+    f, r = h.last_command
+    assert np.allclose(f, 1.0)
+    h.close()
+
+
+def test_rehome_makes_current_pose_open(mock_hand):
+    for _ in range(12):
+        mock_hand.set_targets(np.full(12, 0.5), 0.0)
+    mock_hand.relax()
+    mock_hand.rehome()
+    f, _ = mock_hand.last_command
+    assert np.allclose(f, 0.0) and mock_hand.torque_on
+    sid = mock_hand.cfg.servos[0].id
+    half = mock_hand.bus_sim.servos[sid].goal
+    for _ in range(12):
+        mock_hand.set_targets(np.ones(12), 0.0)
+    assert mock_hand.bus_sim.servos[sid].goal == half + mock_hand.cfg.servos[0].span
