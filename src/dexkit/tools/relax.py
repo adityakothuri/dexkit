@@ -4,6 +4,7 @@
     dexkit-relax --now      skip the gentle move: torque off immediately, nothing moves
 
 Use it after a sequence, a pose you don't like, or before putting the hand down.
+It never asks for 'go', so it also works from a shell without a keyboard.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--now", action="store_true", help="torque off immediately without moving first")
     p.add_argument("--duration", type=float, default=2.0, help="seconds for the gentle release move")
     args = p.parse_args(argv)
+    args.yes = True  # the "make it safe" command never waits for 'go'
     init(args)
     try:
         with open_session(args, need_hand=True) as s:

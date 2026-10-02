@@ -443,4 +443,5 @@ class FeetechHand(HandInterface):
                 self.driver.bus.close()
             except Exception as e:  # noqa: BLE001
                 log.debug("close: %s", e)
+        self.driver = None  # a later relax() (atexit, e-stop) is then a no-op instead of a port error
         self.connected = False

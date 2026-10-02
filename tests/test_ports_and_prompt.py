@@ -276,3 +276,9 @@ def test_calibration_space_is_an_estop(hand_cfg):
     with pytest.raises(EStopTripped, match="SPACE"):
         capture_servo(d, hand_cfg.servos[0].id, "x", hand_cfg, SpaceAfterThree(), step_delay=0.0)
     assert not any(s.torque_on for s in t.servos.values())
+
+
+def test_relax_after_close_is_a_noop(mock_hand):
+    mock_hand.close()
+    mock_hand.relax()  # must not raise or log a port error
+    assert mock_hand.driver is None and not mock_hand.torque_on
