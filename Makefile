@@ -46,13 +46,15 @@ mock-all:
 	DEXKIT_DATA=$$(mktemp -d) sh -c '\
 	  set -e; \
 	  $(BIN)/dexkit-scan --mock; \
-	  $(BIN)/dexkit-calibrate-hand --mock --scripted; \
+	  $(BIN)/dexkit-calibrate-hand --mock --scripted --force; \
 	  $(BIN)/dexkit-calibrate-gantry --mock --scripted; \
 	  $(BIN)/dexkit-pose --mock --yes fist; \
 	  $(BIN)/dexkit-teleop --mock --yes --duration 10 --script "0.5:3,1:],1.5:.,2:w,3:r,3.5:f,5:o,6:r,9:esc"; \
 	  $(BIN)/dexkit-replay --mock --yes $$(ls -t $$DEXKIT_DATA/recordings | head -1); \
 	  $(BIN)/dexkit-run --mock examples/pick_and_show.yaml --dry-run; \
 	  $(BIN)/dexkit-run --mock --yes --mock-speed 5 examples/pick_and_show.yaml; \
+	  $(BIN)/dexkit-run --mock --yes --loop 2 examples/finger_ripple.yaml; \
+	  $(BIN)/dexkit-run --mock --yes examples/show_off.yaml; \
 	  $(BIN)/dexkit-estop --mock; \
 	  echo "mock-all: every CLI OK"'
 

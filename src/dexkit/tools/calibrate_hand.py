@@ -275,6 +275,10 @@ def main(argv: list[str] | None = None) -> None:
             done = [sid for sid in cfg.ids if sid not in targets]
             if done:
                 print(f"already calibrated, skipping: {done} (use --force to redo them)")
+            if not targets:
+                print("nothing to calibrate: every servo is done (use --force or --servo N to redo one)")
+                print_wiring(cfg)
+                return
         if set(targets) & set(missing):
             print(f"servos not responding: {sorted(set(targets) & set(missing))}; run dexkit-scan")
             sys.exit(1)

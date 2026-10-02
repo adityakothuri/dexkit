@@ -1,0 +1,31 @@
+# A tour of the pose library. Hand only. This is the demo.
+name: show_off
+steps:
+  - {pose: open, duration: 1.0}
+  - {wait: 0.8}
+  - {pose: peace, duration: 1.2}
+  - {wait: 0.8}
+  - {pose: rock_on, duration: 1.2}
+  - {wait: 0.8}
+  - {pose: shaka, duration: 1.2}
+  - {roll: 25, duration: 0.4}
+  - {roll: -25, duration: 0.4}
+  - {roll: 0, duration: 0.4}
+  - {pose: spidey, duration: 1.2}
+  - {wait: 0.8}
+  - {pose: finger_gun, duration: 1.2}
+  - {wait: 0.8}
+  - {pose: thumbs_up, duration: 1.2}
+  - {roll: 30, duration: 0.5}
+  - {wait: 0.6}
+  - {roll: 0, duration: 0.5}
+  - {pose: ok, duration: 1.2}
+  - {wait: 0.8}
+  - {pose: pinch, duration: 1.2}
+  - {wait: 0.8}
+  - {pose: tripod, duration: 1.2}
+  - {wait: 0.8}
+  - {pose: fist, duration: 1.2}
+  - {wait: 0.8}
+  - {pose: open, duration: 1.0}
+  - {pose: relax, duration: 0.8}

@@ -78,7 +78,7 @@ Every command accepts `--mock` (simulated hardware), `--yes` (skip the `go` prom
 | `dexkit-pose <name>` / `--list` | One-shot: move, hold 2 s (`--hold`), relax. `--minjerk` optional. |
 | `dexkit-teleop` | Keyboard teleop with a live status line (keys below). |
 | `dexkit-replay <recording>` | Replay a `data/recordings/*.npz` recording, with a 1 s lead-in. |
-| `dexkit-run <sequence.yaml> [--dry-run]` | Validate every step, then execute the sequence. |
+| `dexkit-run <sequence.yaml> [--dry-run] [--loop N]` | Validate every step, then execute the sequence (N times; 0 = until Ctrl+C). Hand-only sequences never open the gantry. See `examples/`. |
 | `dexkit-estop` / `dexkit-estop --clear` | Standalone kill from a second terminal. It sets a flag that stops any running dexkit loop and blocks new sessions until you run `--clear`. |
 | `dexkit-collect`, `dexkit-train`, `dexkit-infer` | The policy layer (Phase 6, see below). |
 | `dexkit-ros-bridge` | Optional ROS 2 bridge on CMU's topic names. |

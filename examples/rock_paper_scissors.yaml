@@ -1,0 +1,13 @@
+# Three pumps of the fist with the wrist, then reveal scissors (peace). Hand only.
+name: rock_paper_scissors
+steps:
+  - {pose: fist, duration: 0.8}
+  - {roll: 20, duration: 0.3}
+  - {roll: -20, duration: 0.3}
+  - {roll: 20, duration: 0.3}
+  - {roll: -20, duration: 0.3}
+  - {roll: 20, duration: 0.3}
+  - {roll: 0, duration: 0.3}
+  - {pose: peace, duration: 0.5}
+  - {wait: 2.0}
+  - {pose: relax, duration: 0.8}

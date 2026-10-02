@@ -16,9 +16,20 @@ from dexkit.control.poses import (
 
 def test_defaults_load_with_generated_curls(hand_cfg):
     lib = PoseLibrary.load(hand_cfg)
-    for name in ["open", "fist", "pinch", "point", "thumbs_up", "ok", "wave_a", "wave_b"]:
+    for name in ["open", "fist", "pinch", "point", "thumbs_up", "ok", "wave_a", "wave_b", "peace", "rock_on",
+                 "shaka", "spidey", "finger_gun", "one", "two", "three", "four", "five", "claw", "tripod",
+                 "cross_thumb"]:
         assert name in lib
     assert all(f"finger_{i}_curl" in lib for i in range(1, 13))
+    assert all(f"{s.name}_only" in lib for s in hand_cfg.servos)
+    only = lib["thumb_adduct_only"].fingers
+    assert only[hand_cfg.names.index("thumb_adduct")] == 1.0 and only.sum() == 1.0
+    # Every shipped pose must respect the flexor/extensor antagonist limit, or the driver
+    # would silently scale it and the pose would not look as written.
+    for name, pose in lib.poses.items():
+        for a, b in hand_cfg.antagonist_pairs():
+            assert pose.fingers[a] + pose.fingers[b] <= 1.0 + 1e-9, f"{name}: {hand_cfg.names[a]}+{hand_cfg.names[b]}"
+
     assert np.all(lib["relax"].fingers == 0)
     roles = [s.role for s in hand_cfg.servos]
     names = hand_cfg.names

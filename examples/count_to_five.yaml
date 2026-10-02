@@ -1,0 +1,17 @@
+# Count 1..5 on the fingers, then close. Hand only (no gantry steps).
+name: count_to_five
+steps:
+  - {pose: fist, duration: 0.8}
+  - {wait: 0.6}
+  - {pose: one, duration: 0.6}
+  - {wait: 0.6}
+  - {pose: two, duration: 0.6}
+  - {wait: 0.6}
+  - {pose: three, duration: 0.6}
+  - {wait: 0.6}
+  - {pose: four, duration: 0.6}
+  - {wait: 0.6}
+  - {pose: five, duration: 0.6}
+  - {wait: 1.0}
+  - {pose: fist, duration: 0.8}
+  - {pose: relax, duration: 0.6}

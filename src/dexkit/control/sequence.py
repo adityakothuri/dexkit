@@ -166,6 +166,8 @@ def main(argv: list[str] | None = None) -> None:
     p = common_parser("Run a YAML sequence of poses and gantry moves.")
     p.add_argument("sequence", help="path to sequence YAML")
     p.add_argument("--dry-run", action="store_true", help="validate and print the plan only")
+    p.add_argument("--loop", type=int, default=1, metavar="N",
+                   help="run the sequence N times (0 = until Ctrl+C or e-stop)")
     add_gantry_flags(p)
     args = p.parse_args(argv)
     init(args)
@@ -195,8 +197,14 @@ def main(argv: list[str] | None = None) -> None:
             start = tuple(float(v) for v in s.gantry.get_state().xyz)
             seq = validate(data, poses, box, start_xyz=start, roll_range=hand_cfg.roll.range_deg, **kw)
         t0 = time.monotonic()
-        execute(seq, s.hand, s.gantry, poses, rate_hz=hand_cfg.rate_hz, estop=s.estop)
-        print(f"sequence '{seq.name}' done in {time.monotonic() - t0:.1f}s")
+        runs = 0
+        while args.loop == 0 or runs < args.loop:
+            s.estop.check()
+            execute(seq, s.hand, s.gantry, poses, rate_hz=hand_cfg.rate_hz, estop=s.estop)
+            runs += 1
+            if args.loop != 1:
+                log.info("sequence '%s': run %d done", seq.name, runs)
+        print(f"sequence '{seq.name}' done ({runs} run{'s' if runs != 1 else ''}) in {time.monotonic() - t0:.1f}s")
 
 
 if __name__ == "__main__":

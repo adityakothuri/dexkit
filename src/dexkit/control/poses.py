@@ -77,12 +77,12 @@ class PoseLibrary:
                                    float(d.get("roll", 0.0)))
             except (ValueError, TypeError) as e:
                 raise ValueError(f"{p}: pose '{name}': {e}") from e
-        for i in range(N_FINGERS):
-            key = f"finger_{i + 1}_curl"
-            if key not in poses:
-                f = np.zeros(N_FINGERS)
-                f[i] = 1.0
-                poses[key] = Pose(f, 0.0)
+        for i, s in enumerate(hand_cfg.servos):
+            f = np.zeros(N_FINGERS)
+            f[i] = 1.0
+            poses.setdefault(f"finger_{i + 1}_curl", Pose(f, 0.0))
+            if s.name in TENDONS:  # by tendon name, independent of channel wiring
+                poses.setdefault(f"{s.name}_only", Pose(f.copy(), 0.0))
         if hand_cfg.unassigned:
             log.warning("servo channels %s are not assigned to a tendon yet; poses only drive the assigned ones",
                         hand_cfg.unassigned)
@@ -172,7 +172,7 @@ def current_pose(hand: HandInterface) -> Pose:
 
 
 INTERACTIVE_HELP = """commands:
-  <pose name>          move to a pose (e.g. open, fist, pinch, point, finger_3_curl)
+  <pose name>          move to a pose (e.g. open, fist, peace, rock_on, pinky_flex_only)
   f <N> <value>        set finger servo N (1-12) to value 0..1
   roll <deg>           set forearm roll in degrees
   save <name>          save the current commanded pose to poses.yaml

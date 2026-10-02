@@ -17,4 +17,21 @@ poses:
   ok:        {fingers: {default: 0.0, thumb_flex: 0.7, index_flex: 0.7, thumb_adduct: 0.5}, roll: 0}
   wave_a:    {fingers: {default: 0.0, index_flex: 0.4, ring_flex: 0.4}, roll: 20}
   wave_b:    {fingers: {default: 0.0, middle_flex: 0.4, pinky_flex: 0.4}, roll: -20}
-# finger_1_curl .. finger_12_curl (channel N-1 at 1.0, others 0) are generated automatically.
+  # --- signs (right hand). Per finger: flex OR extend, never both high.
+  peace:      {fingers: {default: 0.0, index_extend: 0.5, middle_extend: 0.5, ring_flex: 1.0, pinky_flex: 1.0, thumb_flex: 0.8, thumb_adduct: 0.5}, roll: 0}
+  rock_on:    {fingers: {default: 0.0, index_extend: 0.5, pinky_extend: 0.5, middle_flex: 1.0, ring_flex: 1.0, thumb_flex: 0.8, thumb_adduct: 0.5}, roll: 0}
+  shaka:      {fingers: {default: 0.0, thumb_extend: 0.5, pinky_extend: 0.5, index_flex: 1.0, middle_flex: 1.0, ring_flex: 1.0}, roll: 0}
+  spidey:     {fingers: {default: 0.0, index_extend: 0.5, pinky_extend: 0.5, thumb_extend: 0.5, middle_flex: 1.0, ring_flex: 1.0}, roll: 0}
+  finger_gun: {fingers: {default: 0.0, index_extend: 0.5, thumb_extend: 0.6, middle_flex: 1.0, ring_flex: 1.0, pinky_flex: 1.0}, roll: 0}
+  # --- counting
+  one:        {fingers: {default: 0.0, flex: 1.0, index_flex: 0.0, index_extend: 0.5}, roll: 0}
+  two:        {fingers: {default: 0.0, index_extend: 0.5, middle_extend: 0.5, ring_flex: 1.0, pinky_flex: 1.0, thumb_flex: 0.8, thumb_adduct: 0.5}, roll: 0}
+  three:      {fingers: {default: 0.0, index_extend: 0.4, middle_extend: 0.4, ring_extend: 0.4, pinky_flex: 1.0, thumb_flex: 0.8, thumb_adduct: 0.5}, roll: 0}
+  four:       {fingers: {default: 0.0, extend: 0.4, thumb_extend: 0.0, thumb_flex: 0.8, thumb_adduct: 0.6}, roll: 0}
+  five:       {fingers: {default: 0.0, extend: 0.6}, roll: 0}
+  # --- grasps
+  claw:       {fingers: {default: 0.0, flex: 0.5}, roll: 0}
+  tripod:     {fingers: {default: 0.0, thumb_flex: 0.7, index_flex: 0.7, middle_flex: 0.7, thumb_adduct: 0.5}, roll: 0}
+  cross_thumb: {fingers: {default: 0.0, flex: 1.0, thumb_adduct: 0.8}, roll: 0}
+# Generated automatically: finger_1_curl .. finger_12_curl (channel N-1 at 1.0) and one
+# <tendon>_only pose per assigned tendon (e.g. pinky_flex_only), for choreography.

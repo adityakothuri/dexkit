@@ -2,6 +2,7 @@
 # Hand actions are floats in [0, 1] per finger servo (0 = slack, 1 = tight);
 # roll is in degrees. Conversion to ticks happens only in hw/feetech_hand.py.
 # HLS vs STS: address 44 is Goal Torque on HLS, Goal Time on STS.
+side: right
 port: /dev/dexkit_hand
 baud: 1000000
 fallback_baud: 115200
@@ -10,23 +11,34 @@ voltage_window: [6.0, 8.4]
 voltage_check_period_s: 2.0
 max_temp_c: 65
 rate_hz: 20
-calibrated_at: '2026-10-02T04:34:58'
+calibrated_at: '2026-10-02T05:02:03'
 servo_family: hls
 registers: {}
 servos:
 - {id: 0, name: pinky_flex, finger: pinky, role: flex, slack: 3944, tight: 12093, inverted: false, max_delta_ticks: 120, stall_load: 400,
   calibrated: true}
-- {id: 1, name: ch1, finger: '', slack: 12703, tight: 13970, inverted: false, max_delta_ticks: 120, stall_load: 400, calibrated: true}
-- {id: 2, name: ch2, finger: '', slack: 369, tight: 3553, inverted: false, max_delta_ticks: 120, stall_load: 400, calibrated: true}
-- {id: 3, name: ch3, finger: '', slack: 11518, tight: 12190, inverted: false, max_delta_ticks: 120, stall_load: 400, calibrated: true}
-- {id: 4, name: ch4, finger: '', slack: 3937, tight: 7280, inverted: false, max_delta_ticks: 120, stall_load: 400, calibrated: true}
-- {id: 5, name: ch5, finger: '', slack: 3678, tight: 4471, inverted: false, max_delta_ticks: 120, stall_load: 400, calibrated: true}
-- {id: 6, name: ch6, finger: '', slack: 2251, tight: 6467, inverted: false, max_delta_ticks: 120, stall_load: 400, calibrated: true}
-- {id: 7, name: ch7, finger: '', slack: 1696, tight: 2889, inverted: false, max_delta_ticks: 120, stall_load: 400, calibrated: true}
-- {id: 8, name: ch8, finger: '', slack: 3081, tight: 6463, inverted: false, max_delta_ticks: 120, stall_load: 400, calibrated: true}
-- {id: 9, name: ch9, finger: '', slack: 681, tight: 2552, inverted: false, max_delta_ticks: 120, stall_load: 400, calibrated: true}
-- {id: 10, name: ch10, finger: '', slack: 2521, tight: 5574, inverted: false, max_delta_ticks: 120, stall_load: 400, calibrated: true}
-- {id: 11, name: ch11, finger: '', slack: 2048, tight: 2700, inverted: false, max_delta_ticks: 120, stall_load: 800}
-roll: {id: 12, model: HLS3640M, center: 2048, range_deg: 90, inverted: false, max_delta_ticks: 120}
+- {id: 1, name: thumb_extend, finger: thumb, slack: 12703, tight: 13970, inverted: false, max_delta_ticks: 120, stall_load: 400,
+  calibrated: true, role: extend}
+- {id: 2, name: ring_flex, finger: ring, slack: 369, tight: 3553, inverted: false, max_delta_ticks: 120, stall_load: 400,
+  calibrated: true, role: flex}
+- {id: 3, name: index_adduct, finger: index, slack: 11518, tight: 12190, inverted: false, max_delta_ticks: 120, stall_load: 400,
+  calibrated: true, role: adduct}
+- {id: 4, name: index_flex, finger: index, slack: 3937, tight: 7280, inverted: false, max_delta_ticks: 120, stall_load: 400,
+  calibrated: true, role: flex}
+- {id: 5, name: middle_extend, finger: middle, slack: 3678, tight: 4471, inverted: false, max_delta_ticks: 120, stall_load: 400,
+  calibrated: true, role: extend}
+- {id: 6, name: middle_flex, finger: middle, slack: 2251, tight: 6467, inverted: false, max_delta_ticks: 120, stall_load: 400,
+  calibrated: true, role: flex}
+- {id: 7, name: index_extend, finger: index, slack: 1696, tight: 2889, inverted: false, max_delta_ticks: 120, stall_load: 400,
+  calibrated: true, role: extend}
+- {id: 8, name: thumb_flex, finger: thumb, slack: 3081, tight: 6463, inverted: false, max_delta_ticks: 120, stall_load: 400,
+  calibrated: true, role: flex}
+- {id: 9, name: ring_extend, finger: ring, slack: 681, tight: 2552, inverted: false, max_delta_ticks: 120, stall_load: 400,
+  calibrated: true, role: extend}
+- {id: 10, name: thumb_adduct, finger: thumb, slack: 2521, tight: 5574, inverted: false, max_delta_ticks: 120, stall_load: 400,
+  calibrated: true, role: adduct}
+- {id: 11, name: pinky_extend, finger: pinky, slack: 2780, tight: 4052, inverted: false, max_delta_ticks: 120, stall_load: 400,
+  calibrated: true, role: extend}
+roll: {id: 12, model: HLS3640M, center: 1881, range_deg: 90, inverted: false, max_delta_ticks: 120, calibrated: true}
 defaults: {accel: 50, speed: 1500, torque_limit: 600, goal_torque: 600, calib_torque_limit: 300, calib_step_ticks: 40, calib_max_travel_ticks: 12288,
   calib_direction: 1, stall_load_factor: 1.5, stall_load_floor: 400, stall_time_s: 0.5, stall_backoff: 0.05}

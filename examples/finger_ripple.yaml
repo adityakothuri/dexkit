@@ -1,0 +1,24 @@
+# Curl one finger at a time, pinky to thumb and back, twice. Hand only.
+# Uses the generated <tendon>_only poses, so it follows the wiring in hand.yaml.
+# Try: dexkit-run --loop 3 examples/finger_ripple.yaml
+name: finger_ripple
+steps:
+  - {pose: open, duration: 0.6}
+  - {pose: pinky_flex_only, duration: 0.25}
+  - {pose: ring_flex_only, duration: 0.25}
+  - {pose: middle_flex_only, duration: 0.25}
+  - {pose: index_flex_only, duration: 0.25}
+  - {pose: thumb_flex_only, duration: 0.25}
+  - {pose: index_flex_only, duration: 0.25}
+  - {pose: middle_flex_only, duration: 0.25}
+  - {pose: ring_flex_only, duration: 0.25}
+  - {pose: pinky_flex_only, duration: 0.25}
+  - {pose: ring_flex_only, duration: 0.25}
+  - {pose: middle_flex_only, duration: 0.25}
+  - {pose: index_flex_only, duration: 0.25}
+  - {pose: thumb_flex_only, duration: 0.25}
+  - {pose: index_flex_only, duration: 0.25}
+  - {pose: middle_flex_only, duration: 0.25}
+  - {pose: ring_flex_only, duration: 0.25}
+  - {pose: pinky_flex_only, duration: 0.25}
+  - {pose: open, duration: 0.6}

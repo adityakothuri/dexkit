@@ -1,7 +1,8 @@
+import numpy as np
 import pytest
 
 from dexkit.control.poses import PoseLibrary
-from dexkit.control.sequence import SequenceError, execute, validate
+from dexkit.control.sequence import SequenceError, execute, load_sequence, validate
 from dexkit.hw.safety import TravelBox
 
 BOX = TravelBox([0, 0, -40], [290, 170, 0])
@@ -60,3 +61,24 @@ def test_execute_on_mocks(hand_cfg, mock_hand, mock_gantry, estop):
     assert np.allclose(f, [1.0 if s.role == 'flex' else 0.0 for s in mock_hand.cfg.servos])  # fist = flexors
     assert r == pytest.approx(20, abs=0.1)
     assert np.allclose(mock_gantry.get_state().xyz, [10, 5, -2], atol=0.1)
+
+
+def test_every_example_validates_hand_only_or_with_box(hand_cfg):
+    from dexkit.config import REPO_ROOT
+
+    lib = PoseLibrary.load(hand_cfg)
+    for path in sorted((REPO_ROOT / "examples").glob("*.yaml")):
+        data = load_sequence(path)
+        has_gantry = any("gantry" in s for s in data["steps"])
+        s = validate(data, lib, BOX if has_gantry else None)
+        assert s.steps, path.name
+
+
+def test_run_loop_repeats(hand_cfg, mock_hand, mock_gantry, estop, monkeypatch):
+    lib = PoseLibrary.load(hand_cfg)
+    s = validate(seq({"pose": "peace", "duration": 0.05}, {"pose": "relax", "duration": 0.05}), lib, None)
+    runs = []
+    for _ in range(2):
+        execute(s, mock_hand, None, lib, rate_hz=200, estop=estop)
+        runs.append(mock_hand.last_command[0].copy())
+    assert len(runs) == 2 and np.allclose(runs[0], 0) and np.allclose(runs[1], 0)

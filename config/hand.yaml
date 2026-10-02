@@ -11,7 +11,7 @@ voltage_window: [6.0, 8.4]
 voltage_check_period_s: 2.0
 max_temp_c: 65
 rate_hz: 20
-calibrated_at: '2026-10-02T04:35:35'
+calibrated_at: '2026-10-02T05:02:11'
 servo_family: hls
 registers: {}
 servos:
@@ -39,6 +39,6 @@ servos:
   calibrated: true, role: adduct}
 - {id: 11, name: pinky_extend, finger: pinky, slack: 2780, tight: 4052, inverted: false, max_delta_ticks: 120, stall_load: 400,
   calibrated: true, role: extend}
-roll: {id: 12, model: HLS3640M, center: 2048, range_deg: 90, inverted: false, max_delta_ticks: 120}
+roll: {id: 12, model: HLS3640M, center: 1465, range_deg: 90, inverted: false, max_delta_ticks: 120, calibrated: true}
 defaults: {accel: 50, speed: 1500, torque_limit: 600, goal_torque: 600, calib_torque_limit: 300, calib_step_ticks: 40, calib_max_travel_ticks: 12288,
   calib_direction: 1, stall_load_factor: 1.5, stall_load_floor: 400, stall_time_s: 0.5, stall_backoff: 0.05}

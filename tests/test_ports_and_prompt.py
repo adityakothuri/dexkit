@@ -125,10 +125,15 @@ def test_partial_calibration_is_not_calibrated(hand_cfg):
 
 
 def test_calibration_run_skips_done_servos_and_renames(tmp_path, monkeypatch):
-    from dexkit.config import load_hand_config
+    from dexkit.config import config_dir, dump_yaml, load_hand_config, load_yaml
     from dexkit.tools.calibrate_hand import main
 
     out = tmp_path / "hand.yaml"
+    raw = load_yaml(config_dir() / "hand.yaml")  # start from a copy with nothing calibrated
+    for s in raw["servos"]:
+        s["calibrated"] = False
+    raw["roll"]["calibrated"] = False
+    dump_yaml(raw, out)
     main(["--mock", "--scripted", "--servo", "3", "--name", "ring_x", "--finger", "ring", "--out", str(out)])
     cfg = load_hand_config(out)
     s3 = next(s for s in cfg.servos if s.id == 3)

@@ -222,6 +222,9 @@ Type **`go`** at the checklist. You now get a `pose>` prompt and can type any of
 | `open` | open hand |
 | `fist` | close hand |
 | `pinch`, `point`, `thumbs_up`, `ok` | other poses |
+| `peace`, `rock_on`, `shaka`, `spidey`, `finger_gun` | signs |
+| `one` … `five`, `claw`, `tripod`, `cross_thumb` | counting and grasps |
+| `pinky_flex_only`, `thumb_adduct_only`, … | pull one tendon at a time |
 | `list` | show every pose name |
 | `f 3 0.5` | finger motor 3 to half-curled (0 = open, 1 = fully curled) |
 | `roll 30` | twist the wrist to +30° (use `roll -30` for the other way) |
@@ -275,6 +278,16 @@ dexkit-teleop
 If the gantry isn't plugged in, teleop just runs the hand.
 
 ### Way 3: run a saved routine
+
+Ready-made ones in `examples/` (hand only, no gantry needed):
+
+```bash
+dexkit-run examples/show_off.yaml            # tour of every pose, the demo
+dexkit-run examples/count_to_five.yaml
+dexkit-run examples/rock_paper_scissors.yaml
+dexkit-run examples/wave_hello.yaml
+dexkit-run --loop 3 examples/finger_ripple.yaml   # --loop N repeats; 0 = until Ctrl+C
+```
 
 Write the steps in a file. Start by copying `examples/pick_and_show.yaml`:
 

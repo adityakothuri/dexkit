@@ -1,0 +1,13 @@
+# Open hand, wave with the wrist four times. Hand only.
+name: wave_hello
+steps:
+  - {pose: open, duration: 0.8}
+  - {roll: 35, duration: 0.4}
+  - {roll: -35, duration: 0.4}
+  - {roll: 35, duration: 0.4}
+  - {roll: -35, duration: 0.4}
+  - {roll: 35, duration: 0.4}
+  - {roll: -35, duration: 0.4}
+  - {roll: 35, duration: 0.4}
+  - {roll: 0, duration: 0.4}
+  - {pose: relax, duration: 0.8}
