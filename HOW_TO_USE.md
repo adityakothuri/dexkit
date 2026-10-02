@@ -124,15 +124,17 @@ It walks you through every motor, one at a time:
 
 1. **"Pull this finger fully OPEN"**: hold the finger open with your hand, then press **Enter**.
 2. **"Release the finger"**: let go and press **Enter**. The motor now slowly curls the finger.
-3. When the finger is curled as far as you want, type **`t`** and press **Enter**.
-   - Finger going the wrong way? Type **`r`** + Enter to reverse.
+3. **Watch the spool on the first steps.** If it's unwinding the tendon (finger getting looser, or thread coming off the spool), type **`r`** + Enter straight away to reverse. Once you know the right way for one motor, start all the others with `dexkit-calibrate-hand --reverse` if that's the direction that worked (the motors are identical, so they all wind the same way).
+4. When the finger is curled as far as you want, type **`t`** and press **Enter**.
    - Went too far? Type **`u`** + Enter to back up a little.
    - Too slow or too fast? Type **`f`** + Enter to double the speed, or **`s`** + Enter to halve it. To start faster, run `dexkit-calibrate-hand --step-ticks 80`.
    - The motor may need **more than one full turn** before the finger starts to curl; that's normal (the spools wind up tendon slack first). It gives up after 3 turns.
    - Finger stalls part-way, or the motor strains but the finger barely moves? It may need more force: `dexkit-calibrate-hand --torque 450` (the default is 300 out of 1000).
-4. For the wrist (ID 12): twist it to the middle/neutral position by hand and press **Enter**.
+5. For the wrist (ID 12): twist it to the middle/neutral position by hand and press **Enter**.
 
-At the end it saves everything to `config/hand.yaml`. To redo just one motor later, run `dexkit-calibrate-hand --servo 5`, using that motor's **ID** from `dexkit-scan` (0–11 for fingers, 12 for the wrist).
+At the end it saves everything to `config/hand.yaml`. To do just one motor, run `dexkit-calibrate-hand --servo 5`, using that motor's **ID** from `dexkit-scan` (0–11 for fingers, 12 for the wrist).
+
+**Which ID is which finger?** Nobody knows yet: the names in `config/hand.yaml` (`middle_flex` etc.) are guesses. To find a finger, run `dexkit-calibrate-hand --servo N` for an ID, press Enter twice, and watch which finger moves. Wrong finger? Type **`x`** + Enter to stop that motor and try the next ID. When you've matched them, rename the `name:` entries in `hand.yaml`.
 
 ### A6. Test it
 

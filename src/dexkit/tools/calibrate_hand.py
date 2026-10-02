@@ -82,6 +82,7 @@ class ScriptedPrompter(Prompter):
 
 def capture_servo(
     d: FeetechDriver, sid: int, name: str, cfg: HandConfig, ui: Prompter, step_delay: float = 0.08,
+    direction: int = 1,
 ) -> dict | None:
     defaults = cfg.defaults
     ui.say(f"\n=== servo {sid} ({name}) ===")
@@ -100,7 +101,8 @@ def capture_servo(
     d.set_torque(sid, True)
     ui.wait_enter("  Torque ON (low limit). Release the finger. Stepping will start; "
                   "press t+Enter at the desired TIGHT pose (r reverse, u undo, f faster, s slower, x abort)")
-    direction = 1
+    ui.say(f"  stepping toward {'HIGHER' if direction > 0 else 'LOWER'} counts; watch the spool, "
+           "r+Enter if it unwinds the tendon")
     step = defaults.calib_step_ticks
     goal = slack
     history: list[int] = []
@@ -167,6 +169,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--force", action="store_true", help="overwrite an existing real calibration")
     p.add_argument("--out", help="output yaml (default config/hand.yaml; data/mock/hand.yaml with --mock)")
     p.add_argument("--range-deg", type=float, default=None, help="roll range +/- degrees (default from yaml)")
+    p.add_argument("--reverse", action="store_true",
+                   help="step toward LOWER position counts (use if the default direction unwinds the tendon)")
     p.add_argument("--step-ticks", type=int, default=None,
                    help="starting speed: ticks per 0.08 s step (default calib_step_ticks in hand.yaml)")
     p.add_argument("--torque", type=int, default=None,
@@ -223,7 +227,8 @@ def main(argv: list[str] | None = None) -> None:
                         raw["roll"]["range_deg"] = float(args.range_deg)
                 continue
             name = by_id[sid]["name"]
-            result = capture_servo(d, sid, name, cfg, ui, step_delay=step_delay)
+            result = capture_servo(d, sid, name, cfg, ui, step_delay=step_delay,
+                                   direction=-1 if args.reverse else 1)
             if result:
                 by_id[sid].update(result)
     except SafetyTrip as e:
