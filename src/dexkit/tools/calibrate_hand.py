@@ -153,7 +153,7 @@ def capture_servo(
     d.set_torque_limit(sid, defaults.torque_limit)
     d.set_goal_torque(sid, defaults.goal_torque)
     inverted = tight < slack
-    stall = max(int(load * defaults.stall_load_factor), 200)
+    stall = max(int(load * defaults.stall_load_factor), defaults.stall_load_floor)
     ui.say(f"  tight = {tight} (load {load}), inverted = {inverted}, stall_load = {stall}")
     return {"slack": int(slack), "tight": int(tight), "inverted": bool(inverted), "stall_load": stall}
 

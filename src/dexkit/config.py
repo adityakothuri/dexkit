@@ -176,6 +176,7 @@ class HandDefaults:
     calib_direction: int = 1  # +1: step toward higher counts, -1: lower; --reverse flips it
     calib_direction: int = 1  # +1: step toward higher counts, -1: lower (the bench hand winds on -1)
     stall_load_factor: float = 1.5
+    stall_load_floor: int = 400  # never set a stall threshold below this (holding at goal_torque 600 is normal)
     stall_time_s: float = 0.5
     stall_backoff: float = 0.05
     antagonist_max_sum: float = 1.0  # flexor + extensor of one finger may never exceed this together

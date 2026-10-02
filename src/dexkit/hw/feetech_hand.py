@@ -224,6 +224,7 @@ class FeetechHand(HandInterface):
         self.torque_on = True
         self._last_ticks = ticks
         self._load_cap = np.ones(N_FINGERS)
+        self.load_watch.reset()
         self._last_cmd = (np.zeros(N_FINGERS), self.roll.ticks_to_deg(int(ticks[N_FINGERS])))
 
     # ---------------------------------------------------------------- conversions

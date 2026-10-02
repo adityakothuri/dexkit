@@ -14,18 +14,18 @@ calibrated_at: '2026-10-02T03:00:35'
 servo_family: hls
 registers: {}
 servos:
-- {id: 0, name: pinky_flex, finger: pinky, role: flex, slack: -464, tight: 284, inverted: false, max_delta_ticks: 120, stall_load: 200, calibrated: true}
-- {id: 1, name: ch1, finger: '', slack: -645, tight: 3553, inverted: false, max_delta_ticks: 120, stall_load: 200,
+- {id: 0, name: pinky_flex, finger: pinky, role: flex, slack: -464, tight: 284, inverted: false, max_delta_ticks: 120, stall_load: 400, calibrated: true}
+- {id: 1, name: ch1, finger: '', slack: -645, tight: 3553, inverted: false, max_delta_ticks: 120, stall_load: 400,
   calibrated: true}
-- {id: 2, name: ch2, finger: '', slack: 3906, tight: 7333, inverted: false, max_delta_ticks: 120, stall_load: 200,
+- {id: 2, name: ch2, finger: '', slack: 3906, tight: 7333, inverted: false, max_delta_ticks: 120, stall_load: 400,
   calibrated: true}
-- {id: 3, name: ch3, finger: '', slack: 3197, tight: 5388, inverted: false, max_delta_ticks: 120, stall_load: 200,
+- {id: 3, name: ch3, finger: '', slack: 3197, tight: 5388, inverted: false, max_delta_ticks: 120, stall_load: 400,
   calibrated: true}
-- {id: 4, name: ch4, finger: '', slack: 4249, tight: 7431, inverted: false, max_delta_ticks: 120, stall_load: 200,
+- {id: 4, name: ch4, finger: '', slack: 4249, tight: 7431, inverted: false, max_delta_ticks: 120, stall_load: 400,
   calibrated: true}
-- {id: 5, name: ch5, finger: '', slack: 10850, tight: 16644, inverted: false, max_delta_ticks: 120, stall_load: 200,
+- {id: 5, name: ch5, finger: '', slack: 10850, tight: 16644, inverted: false, max_delta_ticks: 120, stall_load: 400,
   calibrated: true}
-- {id: 6, name: ch6, finger: '', slack: 1920, tight: 6417, inverted: false, max_delta_ticks: 120, stall_load: 200,
+- {id: 6, name: ch6, finger: '', slack: 1920, tight: 6417, inverted: false, max_delta_ticks: 120, stall_load: 400,
   calibrated: true}
 - {id: 7, name: ch7, finger: '', slack: 2048, tight: 2700, inverted: false, max_delta_ticks: 120, stall_load: 800}
 - {id: 8, name: ch8, finger: '', slack: 2048, tight: 2700, inverted: false, max_delta_ticks: 120, stall_load: 800}
@@ -34,4 +34,4 @@ servos:
 - {id: 11, name: ch11, finger: '', slack: 2048, tight: 2700, inverted: false, max_delta_ticks: 120, stall_load: 800}
 roll: {id: 12, model: HLS3640M, center: 2048, range_deg: 90, inverted: false, max_delta_ticks: 120}
 defaults: {accel: 50, speed: 1500, torque_limit: 600, goal_torque: 600, calib_torque_limit: 300, calib_step_ticks: 40, calib_max_travel_ticks: 12288,
-  calib_direction: 1, stall_load_factor: 1.5, stall_time_s: 0.5, stall_backoff: 0.05}
+  calib_direction: 1, stall_load_factor: 1.5, stall_load_floor: 400, stall_time_s: 0.5, stall_backoff: 0.05}

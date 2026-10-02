@@ -123,6 +123,9 @@ class LoadWatch:
         self.stall_time_s = stall_time_s
         self._since: dict[int, float] = {}
 
+    def reset(self) -> None:
+        self._since.clear()
+
     def update(self, loads: np.ndarray, now: float) -> list[int]:
         """Return indices that have been stalled for longer than stall_time_s."""
         stalled = []

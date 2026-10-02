@@ -148,13 +148,17 @@ def go_to_pose(
             on_tick(wp)
         rate.sleep()
     # The per-tick slew limit (max_delta_ticks) can lag a short trajectory; keep sending
-    # the final target until the commanded position has actually arrived.
+    # the final target until the commanded position stops changing. (It may settle short
+    # of the pose: the antagonist limit or a stall back-off can scale a target down.)
+    prev_f, prev_r = hand.last_command
     for _ in range(max_settle_ticks):
-        f, r = hand.last_command
-        if np.max(np.abs(f - pose.fingers)) < 1e-3 and abs(r - pose.roll) < 0.1:
+        if np.max(np.abs(prev_f - pose.fingers)) < 1e-3 and abs(prev_r - pose.roll) < 0.1:
             break
         estop.check()
-        hand.set_targets(pose.fingers, pose.roll)
+        f, r = hand.set_targets(pose.fingers, pose.roll)
+        if np.max(np.abs(f - prev_f)) < 1e-6 and abs(r - prev_r) < 1e-6:
+            break
+        prev_f, prev_r = f, r
         rate.sleep()
     return pose
 
