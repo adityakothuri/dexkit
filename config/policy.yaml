@@ -1,0 +1,25 @@
+# Diffusion policy (Phase 6). Hyperparameters follow CMU diff_foam.
+pred_horizon: 16
+obs_horizon: 2
+action_horizon: 8
+vision_feature_dim: 512
+action_dim: 16           # 12 fingers [0,1], roll deg, gantry XYZ mm
+lowdim_obs_dim: 16
+image_size: [240, 320]   # H, W stored in demos
+crop_size: [216, 288]    # H, W center crop fed to ResNet18
+num_diffusion_iters: 100
+beta_schedule: squaredcos_cap_v2
+clip_sample: true
+prediction_type: epsilon
+ema_power: 0.75
+lr: 1.0e-4
+weight_decay: 1.0e-6
+warmup_steps: 500
+batch_size: 64
+num_epochs: 100
+checkpoint_every: 10
+rate_hz: 10
+camera_index: 0
+paths:
+  demos: demos               # relative to data/ (or $DEXKIT_DATA)
+  checkpoints: checkpoints

@@ -1,0 +1,73 @@
+import time
+
+import numpy as np
+import pytest
+
+from dexkit.control.poses import (
+    Pose,
+    PoseLibrary,
+    go_to_pose,
+    interpolate,
+    min_jerk,
+    pose_trajectory,
+    resolve_fingers,
+)
+
+
+def test_defaults_load_with_generated_curls(hand_cfg):
+    lib = PoseLibrary.load(hand_cfg)
+    for name in ["open", "fist", "pinch", "point", "thumbs_up", "ok", "wave_a", "wave_b"]:
+        assert name in lib
+    assert all(f"finger_{i}_curl" in lib for i in range(1, 13))
+    assert np.all(lib["open"].fingers == 0) and np.all(lib["fist"].fingers == 1)
+    pinch = lib["pinch"].fingers
+    groups = [s.finger for s in hand_cfg.servos]
+    for i, g in enumerate(groups):
+        assert pinch[i] == pytest.approx(0.8 if g in ("thumb", "index") else 0.1)
+    assert lib["finger_3_curl"].fingers.tolist() == [0, 0, 1] + [0] * 9
+    with pytest.raises(KeyError):
+        lib["nope"]
+
+
+def test_resolve_fingers_precedence():
+    names = [f"s{i}" for i in range(12)]
+    groups = ["a"] * 6 + ["b"] * 6
+    f = resolve_fingers({"default": 0.1, "b": 0.5, "s11": 0.9}, names, groups)
+    assert f[0] == 0.1 and f[6] == 0.5 and f[11] == 0.9
+    with pytest.raises(ValueError):
+        resolve_fingers({"bogus": 1}, names, groups)
+
+
+def test_yaml_round_trip(hand_cfg, tmp_path):
+    import shutil
+
+    p = tmp_path / "poses.yaml"
+    shutil.copy(hand_cfg.source.parent / "poses.yaml", p)
+    lib = PoseLibrary.load(hand_cfg, p)
+    pose = Pose(np.linspace(0, 1, 12), 12.5)
+    lib.save_pose("custom", pose)
+    lib2 = PoseLibrary.load(hand_cfg, p)
+    assert np.allclose(lib2["custom"].fingers, pose.fingers, atol=1e-4)
+    assert lib2["custom"].roll == pytest.approx(12.5)
+    assert np.allclose(lib2["pinch"].fingers, lib["pinch"].fingers)
+
+
+def test_interpolation_endpoints_exact():
+    a, b = Pose(np.zeros(12), -10), Pose(np.ones(12), 30)
+    for mode in ("linear", "minjerk"):
+        traj = pose_trajectory(a, b, 1.0, 20, mode)
+        assert len(traj) == 20
+        assert np.array_equal(traj[-1].fingers, b.fingers) and traj[-1].roll == 30
+        assert np.array_equal(interpolate(a, b, 0.0, mode).fingers, a.fingers)
+    assert interpolate(a, b, 0.5).roll == pytest.approx(10)
+    assert min_jerk(0.0) == 0 and min_jerk(1.0) == 1 and min_jerk(0.5) == pytest.approx(0.5)
+
+
+def test_go_to_pose_honors_duration(mock_hand, estop):
+    target = Pose(np.full(12, 0.4), 10)
+    t0 = time.monotonic()
+    go_to_pose(mock_hand, target, duration_s=0.5, rate_hz=40, estop=estop)
+    elapsed = time.monotonic() - t0
+    assert 0.45 <= elapsed <= 0.8
+    f, r = mock_hand.last_command
+    assert np.allclose(f, 0.4, atol=0.01) and r == pytest.approx(10, abs=0.1)

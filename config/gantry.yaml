@@ -1,0 +1,29 @@
+# DexKit gantry (3018-style frame, "CNC Pro V5" GRBL board).
+# Gantry actions are millimetres in the zeroed frame; conversion to G-code
+# happens only in hw/grbl_gantry.py. Travel box below is a conservative default
+# for a stock 3018 (X 300, Y 180, Z 45) minus margins; `dexkit-calibrate-gantry`
+# measures the real box on the bench.
+
+port: /dev/dexkit_gantry
+baud: 115200
+reset_on_connect: true       # toggle DTR on open (resets the board, loses G92 zero)
+banner_timeout_s: 3.0
+command_timeout_s: 5.0
+status_hz: 10
+status_report_mask: 1        # $10; 1 = MPos. Set 3 to also report Bf: (needed for policy streaming)
+zeroing: manual              # manual | home ($H needs $22=1 and switches)
+calibrated_at: null
+
+travel_box:
+  min: [0.0, 0.0, -40.0]
+  max: [290.0, 170.0, 0.0]
+margin_mm: 5.0
+
+feed_max_mm_min: 1500
+feed_default_mm_min: 800
+jog_feed_mm_min: 600
+jog_step_mm: 1.0
+jog_step_big_mm: 10.0
+jog_max_backlog_mm: 3.0     # held jog keys never queue more than this ahead of the gantry
+planner_min_free: 2          # streaming guard: skip a send if fewer Bf slots remain
+position_tolerance_mm: 0.1

@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dexkit"
+version = "0.1.0"
+description = "DexKit foam hand (13 Feetech HLS servos) + GRBL gantry control, with a dormant diffusion-policy layer"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "pyserial>=3.5",
+  "numpy>=1.24",
+  "pyyaml>=6.0",
+  "vassar-feetech-servo-sdk>=1.5",
+  "pynput>=1.7",
+  "blessed>=1.20",
+  "rich>=13.0",
+]
+
+[project.optional-dependencies]
+policy = [
+  "torch>=2.3",
+  "torchvision>=0.18",
+  "diffusers>=0.30",
+  "opencv-python>=4.8",
+  "tqdm>=4.66",
+]
+dev = ["pytest>=7.4", "ruff>=0.5"]
+# ROS 2 Humble is installed from apt, not pip:
+#   sudo apt install ros-humble-rclpy ros-humble-sensor-msgs ros-humble-cv-bridge
+ros = []
+
+[project.scripts]
+dexkit-scan = "dexkit.tools.scan_bus:main"
+dexkit-calibrate-hand = "dexkit.tools.calibrate_hand:main"
+dexkit-calibrate-gantry = "dexkit.tools.calibrate_gantry:main"
+dexkit-teleop = "dexkit.control.teleop:main"
+dexkit-pose = "dexkit.control.poses:main"
+dexkit-replay = "dexkit.control.recorder:main"
+dexkit-run = "dexkit.control.sequence:main"
+dexkit-estop = "dexkit.tools.estop:main"
+dexkit-collect = "dexkit.policy.collect:main"
+dexkit-train = "dexkit.policy.train:main"
+dexkit-infer = "dexkit.policy.infer:main"
+dexkit-ros-bridge = "dexkit.ros.bridge_node:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+extend-exclude = ["third_party", "src/dexkit/policy/model"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]

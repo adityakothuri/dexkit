@@ -1,0 +1,321 @@
+"""Pose library (12 finger values in [0,1] + roll degrees) and smooth transitions."""
+
+from __future__ import annotations
+
+import logging
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+from dexkit.config import HandConfig, config_dir, dump_yaml, load_yaml
+from dexkit.hw.base import N_FINGERS, GantryInterface, HandInterface
+from dexkit.hw.safety import ESTOP, EStop, EStopTripped, SafetyTrip
+from dexkit.util import Rate
+
+log = logging.getLogger(__name__)
+
+
+@dataclass
+class Pose:
+    fingers: np.ndarray
+    roll: float = 0.0
+
+    def __post_init__(self) -> None:
+        self.fingers = np.clip(np.asarray(self.fingers, dtype=float), 0.0, 1.0)
+        if self.fingers.shape != (N_FINGERS,):
+            raise ValueError(f"pose needs {N_FINGERS} finger values")
+
+    def to_yaml(self) -> dict[str, Any]:
+        return {"fingers": [round(float(v), 4) for v in self.fingers], "roll": round(float(self.roll), 3)}
+
+
+def resolve_fingers(spec: Any, names: list[str], groups: list[str]) -> np.ndarray:
+    """List of 12, or mapping of servo name / finger group / default -> value."""
+    if isinstance(spec, (list, tuple)):
+        return np.asarray(spec, dtype=float)
+    if not isinstance(spec, dict):
+        raise ValueError(f"fingers must be a list or mapping, got {type(spec).__name__}")
+    valid = set(names) | set(groups) | {"default"}
+    unknown = set(spec) - valid
+    if unknown:
+        raise ValueError(f"unknown finger keys {sorted(unknown)}; valid: {sorted(valid)}")
+    out = np.full(N_FINGERS, float(spec.get("default", 0.0)))
+    for i, g in enumerate(groups):
+        if g in spec:
+            out[i] = float(spec[g])
+    for i, n in enumerate(names):
+        if n in spec:
+            out[i] = float(spec[n])
+    return out
+
+
+class PoseLibrary:
+    def __init__(self, poses: dict[str, Pose], path: Path | None = None) -> None:
+        self.poses = poses
+        self.path = path
+
+    @classmethod
+    def load(cls, hand_cfg: HandConfig, path: str | Path | None = None) -> PoseLibrary:
+        p = Path(path) if path else config_dir() / "poses.yaml"
+        data = load_yaml(p).get("poses") or {}
+        names = hand_cfg.names
+        groups = [s.finger for s in hand_cfg.servos]
+        poses: dict[str, Pose] = {}
+        for name, d in data.items():
+            try:
+                poses[name] = Pose(resolve_fingers(d.get("fingers", {}), names, groups), float(d.get("roll", 0.0)))
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"{p}: pose '{name}': {e}") from e
+        for i in range(N_FINGERS):
+            key = f"finger_{i + 1}_curl"
+            if key not in poses:
+                f = np.zeros(N_FINGERS)
+                f[i] = 1.0
+                poses[key] = Pose(f, 0.0)
+        return cls(poses, p)
+
+    def __contains__(self, name: str) -> bool:
+        return name in self.poses
+
+    def __getitem__(self, name: str) -> Pose:
+        if name not in self.poses:
+            raise KeyError(f"unknown pose '{name}'. Known: {', '.join(sorted(self.poses))}")
+        return self.poses[name]
+
+    def names(self) -> list[str]:
+        return sorted(self.poses)
+
+    def save_pose(self, name: str, pose: Pose, path: str | Path | None = None) -> None:
+        """Write one pose into poses.yaml, keeping the others as written."""
+        p = Path(path) if path else self.path
+        if p is None:
+            raise ValueError("no poses.yaml path")
+        data = load_yaml(p) if p.exists() else {}
+        data.setdefault("poses", {})
+        data["poses"][name] = pose.to_yaml()
+        dump_yaml(data, p, header="# Named hand poses (see comments in the shipped file for the format).\n")
+        self.poses[name] = pose
+
+
+def min_jerk(alpha: np.ndarray | float) -> np.ndarray | float:
+    a = np.clip(alpha, 0.0, 1.0)
+    return 10 * a**3 - 15 * a**4 + 6 * a**5
+
+
+def interpolate(start: Pose, end: Pose, alpha: float, mode: str = "linear") -> Pose:
+    s = float(min_jerk(alpha)) if mode == "minjerk" else float(np.clip(alpha, 0.0, 1.0))
+    return Pose(start.fingers + (end.fingers - start.fingers) * s, start.roll + (end.roll - start.roll) * s)
+
+
+def pose_trajectory(start: Pose, end: Pose, duration_s: float, rate_hz: float, mode: str = "linear") -> list[Pose]:
+    """Waypoints after `start`, ending exactly at `end`; one per tick of rate_hz."""
+    n = max(1, int(round(duration_s * rate_hz)))
+    return [interpolate(start, end, i / n, mode) for i in range(1, n + 1)]
+
+
+def go_to_pose(
+    hand: HandInterface,
+    pose: Pose,
+    duration_s: float = 1.0,
+    rate_hz: float = 20.0,
+    mode: str = "linear",
+    estop: EStop = ESTOP,
+    on_tick: Callable[[Pose], None] | None = None,
+    rate: Rate | None = None,
+    max_settle_ticks: int = 100,
+) -> Pose:
+    f, r = hand.last_command
+    start = Pose(f, r)
+    rate = rate or Rate(rate_hz)
+    for wp in pose_trajectory(start, pose, duration_s, rate_hz, mode):
+        estop.check()
+        hand.set_targets(wp.fingers, wp.roll)
+        if on_tick:
+            on_tick(wp)
+        rate.sleep()
+    # The per-tick slew limit (max_delta_ticks) can lag a short trajectory; keep sending
+    # the final target until the commanded position has actually arrived.
+    for _ in range(max_settle_ticks):
+        f, r = hand.last_command
+        if np.max(np.abs(f - pose.fingers)) < 1e-3 and abs(r - pose.roll) < 0.1:
+            break
+        estop.check()
+        hand.set_targets(pose.fingers, pose.roll)
+        rate.sleep()
+    return pose
+
+
+def current_pose(hand: HandInterface) -> Pose:
+    st = hand.get_state()
+    return Pose(np.clip(st.fingers, 0, 1), st.roll_deg)
+
+
+# --------------------------------------------------------------------------- CLI
+
+
+INTERACTIVE_HELP = """commands:
+  <pose name>          move to a pose (e.g. open, fist, pinch, point, finger_3_curl)
+  f <N> <value>        set finger servo N (1-12) to value 0..1
+  roll <deg>           set forearm roll in degrees
+  save <name>          save the current commanded pose to poses.yaml
+  list                 list poses
+  state                print measured finger values, roll, voltage, load
+  relax                torque off (hand goes limp) and quit
+  quit / q             relax and quit"""
+
+GANTRY_HELP = """gantry commands (dexkit-pose --gantry):
+  where                print gantry position (mm) and state
+  jog <x|y|z> <mm>     move one axis by mm, e.g. jog x 10, jog z -5 (z negative = down)
+  zero                 declare the current gantry position as 0,0,0
+  goto <x> <y> <z>     move to an absolute position in mm (after zero)"""
+
+AXES = {"x": 0, "y": 1, "z": 2}
+
+
+def gantry_command(gantry: GantryInterface, parts: list[str], estop: EStop) -> bool:
+    """Handle one gantry command line. Returns False if `parts` is not a gantry command."""
+    cmd = parts[0].lower()
+    if cmd == "where" and len(parts) == 1:
+        st = gantry.get_state()
+        print(f"gantry {np.round(st.xyz, 2).tolist()} mm, {st.state}"
+              + ("" if st.frame_valid else " (not zeroed: jog to your corner, then type zero)"))
+    elif cmd == "zero" and len(parts) == 1:
+        gantry.set_zero()
+        print("gantry zero set here (0, 0, 0)")
+    elif cmd == "jog" and len(parts) == 3:
+        if parts[1].lower() not in AXES:
+            raise ValueError("axis must be x, y or z")
+        delta = [0.0, 0.0, 0.0]
+        delta[AXES[parts[1].lower()]] = float(parts[2])
+        if not gantry.jog(*delta):
+            print("jog blocked by the travel box")
+        _wait_gantry(gantry, estop)
+        print(f"gantry {np.round(gantry.get_state().xyz, 2).tolist()} mm")
+    elif cmd == "goto" and len(parts) == 4:
+        x, y, z = (float(v) for v in parts[1:])
+        gantry.move_to(x, y, z, wait=False)
+        _wait_gantry(gantry, estop)
+        print(f"gantry {np.round(gantry.get_state().xyz, 2).tolist()} mm")
+    else:
+        return False
+    return True
+
+
+def _wait_gantry(gantry: GantryInterface, estop: EStop, timeout: float = 120.0) -> None:
+    deadline = time.monotonic() + timeout
+    time.sleep(0.1)
+    while gantry.get_state().state != "Idle":
+        estop.check()
+        if time.monotonic() > deadline:
+            raise TimeoutError("gantry move timed out")
+        time.sleep(0.1)
+
+
+def interactive(hand: HandInterface, lib: PoseLibrary, rate_hz: float, duration: float, mode: str,
+                estop: EStop, read: Callable[[str], str] = input, gantry: GantryInterface | None = None) -> None:
+    print(INTERACTIVE_HELP)
+    if gantry is not None:
+        print(GANTRY_HELP)
+    while True:
+        try:
+            line = read("pose> ").strip()
+        except EOFError:
+            return
+        if not line:
+            continue
+        parts = line.split()
+        cmd = parts[0].lower()
+        try:
+            if cmd in ("q", "quit", "exit", "relax"):
+                return
+            if cmd in ("help", "?"):
+                print(INTERACTIVE_HELP)
+                if gantry is not None:
+                    print(GANTRY_HELP)
+            elif cmd == "list":
+                print(", ".join(lib.names()))
+            elif cmd == "state":
+                st = hand.get_state()
+                print(f"fingers {np.round(st.fingers, 2).tolist()} roll {st.roll_deg:+.1f} "
+                      f"V {st.min_voltage} load {st.load}")
+            elif cmd == "save" and len(parts) == 2:
+                f, r = hand.last_command
+                lib.save_pose(parts[1], Pose(f, r))
+                print(f"saved '{parts[1]}'")
+            elif cmd == "f" and len(parts) == 3:
+                n = int(parts[1])
+                if not 1 <= n <= N_FINGERS:
+                    raise ValueError(f"finger servo must be 1..{N_FINGERS}")
+                f, r = hand.last_command
+                f[n - 1] = float(parts[2])
+                go_to_pose(hand, Pose(f, r), duration, rate_hz, mode, estop=estop)
+            elif cmd == "roll" and len(parts) == 2:
+                f, _ = hand.last_command
+                go_to_pose(hand, Pose(f, float(parts[1])), duration, rate_hz, mode, estop=estop)
+            elif cmd in lib:
+                go_to_pose(hand, lib[cmd], duration, rate_hz, mode, estop=estop)
+                f, r = hand.last_command
+                print(f"-> {cmd}: commanded {np.round(f, 2).tolist()} roll {r:+.1f}")
+            elif gantry is not None and gantry_command(gantry, parts, estop):
+                pass
+            else:
+                print(f"unknown command or pose '{line}' (type help, list or quit)")
+        except (ValueError, IndexError) as e:
+            print(f"bad input: {e}")
+        except EStopTripped:
+            raise
+        except SafetyTrip as e:
+            print(f"refused: {e}")
+        except (OSError, TimeoutError) as e:
+            print(f"gantry error: {e}")
+
+
+def main(argv: list[str] | None = None) -> None:
+    from dexkit.cli import common_parser, init, open_session
+
+    p = common_parser("Move the hand to named poses. With no pose name: interactive prompt.")
+    p.add_argument("name", nargs="?", help="pose name; omit for the interactive prompt")
+    p.add_argument("--duration", type=float, default=1.0)
+    p.add_argument("--minjerk", action="store_true", help="minimum-jerk instead of linear interpolation")
+    p.add_argument("--list", action="store_true", help="list known poses and exit")
+    p.add_argument("--hold", type=float, default=2.0,
+                   help="seconds to hold the pose before relaxing and exiting (one-shot mode)")
+    p.add_argument("--gantry", action="store_true",
+                   help="interactive mode: also connect the gantry (where / jog / zero / goto)")
+    p.add_argument("--restore-zero", action="store_true",
+                   help="with --gantry: restore the last saved gantry zero without asking")
+    args = p.parse_args(argv)
+    init(args)
+
+    from dexkit.config import load_hand_config
+
+    lib = PoseLibrary.load(load_hand_config())
+    if args.list:
+        for n in lib.names():
+            pose = lib[n]
+            print(f"{n:16s} roll {pose.roll:+6.1f}  {np.round(pose.fingers, 2).tolist()}")
+        return
+    if args.name and args.name not in lib:
+        p.error(f"unknown pose '{args.name}'. Known: {', '.join(lib.names())}")
+    mode = "minjerk" if args.minjerk else "linear"
+
+    with open_session(args, need_hand=True, need_gantry=bool(args.gantry and not args.name)) as s:
+        assert s.hand is not None and s.hand_cfg is not None
+        if not args.name:
+            interactive(s.hand, lib, s.hand_cfg.rate_hz, args.duration, mode, s.estop, gantry=s.gantry)
+            return
+        t0 = time.monotonic()
+        go_to_pose(s.hand, lib[args.name], args.duration, s.hand_cfg.rate_hz, mode, estop=s.estop)
+        time.sleep(args.hold)
+        st = s.hand.get_state()
+        print(f"pose '{args.name}' reached in {time.monotonic() - t0:.2f}s; "
+              f"measured fingers {np.round(st.fingers, 2).tolist()} roll {st.roll_deg:+.1f}")
+        print("relaxing (torque off). Use `dexkit-pose` with no name to stay connected between poses.")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,17 @@
+# Named hand poses. Gantry is not part of a pose.
+# `fingers` is either a list of 12 values in [0,1] (servo order from hand.yaml),
+# or a mapping whose keys are servo names, finger groups (thumb, index, middle,
+# ring, pinky, palm) or `default`. Servo names override groups override default.
+# `roll` is degrees. Tune all of these after calibration.
+
+poses:
+  open:      {fingers: {default: 0.0}, roll: 0}
+  fist:      {fingers: {default: 1.0}, roll: 0}
+  pinch:     {fingers: {default: 0.1, thumb: 0.8, index: 0.8}, roll: 0}
+  point:     {fingers: {default: 1.0, index: 0.0}, roll: 0}
+  thumbs_up: {fingers: {default: 1.0, thumb: 0.0}, roll: 0}
+  ok:        {fingers: {default: 0.0, thumb: 0.7, index: 0.7}, roll: 0}
+  wave_a:    {fingers: {default: 0.0, index: 0.4, ring: 0.4}, roll: 20}
+  wave_b:    {fingers: {default: 0.0, middle: 0.4, pinky: 0.4}, roll: -20}
+# finger_1_curl .. finger_12_curl are generated automatically (servo N at 1.0,
+# others at 0.0) unless defined here.

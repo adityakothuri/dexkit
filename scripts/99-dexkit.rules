@@ -1,0 +1,11 @@
+# DexKit udev rules: stable names for the two USB serial devices.
+# Install: sudo cp scripts/99-dexkit.rules /etc/udev/rules.d/ && sudo udevadm control --reload && sudo udevadm trigger
+#
+# Waveshare Bus Servo Adapter (A): WCH CH343 (1a86:55d3), cdc-acm -> /dev/ttyACM*
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d3", SYMLINK+="dexkit_hand", MODE="0660", GROUP="dialout"
+# GRBL board (CNC Pro V5 / 3018): WCH CH340 (1a86:7523) -> /dev/ttyUSB*
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="dexkit_gantry", MODE="0660", GROUP="dialout"
+#
+# Both chips share vendor 1a86. If your board uses a different product ID, find it with
+#   udevadm info -a -n /dev/ttyACM0 | grep -E 'idVendor|idProduct|serial'
+# and, if two identical chips are present, pin each rule to its serial: ATTRS{serial}=="<serial>"

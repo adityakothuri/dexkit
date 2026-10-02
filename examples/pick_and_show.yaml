@@ -1,0 +1,12 @@
+# Demo sequence: open, move over the object, descend, grasp, lift, roll, show, release.
+# Gantry coordinates are mm in the zeroed frame; omitted axes keep their last value.
+name: pick_and_show
+steps:
+  - {pose: open, duration: 1.0}
+  - {gantry: {x: 50, y: 30, z: 0}, feed: 800}
+  - {gantry: {z: -20}, feed: 300}
+  - {pose: fist, duration: 1.5}
+  - {gantry: {z: 0}, feed: 300}
+  - {roll: 45, duration: 1.0}
+  - {wait: 2.0}
+  - {pose: open, duration: 1.0}
