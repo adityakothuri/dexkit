@@ -10,11 +10,11 @@ voltage_window: [6.0, 8.4]
 voltage_check_period_s: 2.0
 max_temp_c: 65
 rate_hz: 20
-calibrated_at: '2026-10-02T02:06:04'
+calibrated_at: null  # placeholder values below; dexkit-calibrate-hand fills them in
 servo_family: hls
 registers: {}
 servos:
-- {id: 0, name: thumb_flex, finger: thumb, slack: 3574, tight: 4048, inverted: false, max_delta_ticks: 120, stall_load: 200}
+- {id: 0, name: thumb_flex, finger: thumb, slack: 2048, tight: 2700, inverted: false, max_delta_ticks: 120, stall_load: 800}
 - {id: 1, name: thumb_abd, finger: thumb, slack: 2048, tight: 2700, inverted: false, max_delta_ticks: 120, stall_load: 800}
 - {id: 2, name: thumb_rot, finger: thumb, slack: 2048, tight: 2700, inverted: false, max_delta_ticks: 120, stall_load: 800}
 - {id: 3, name: index_flex, finger: index, slack: 2048, tight: 2700, inverted: false, max_delta_ticks: 120, stall_load: 800}
@@ -27,5 +27,17 @@ servos:
 - {id: 10, name: pinky_abd, finger: pinky, slack: 2048, tight: 2700, inverted: false, max_delta_ticks: 120, stall_load: 800}
 - {id: 11, name: palm_cup, finger: palm, slack: 2048, tight: 2700, inverted: false, max_delta_ticks: 120, stall_load: 800}
 roll: {id: 12, model: HLS3640M, center: 2048, range_deg: 90, inverted: false, max_delta_ticks: 120}
-defaults: {accel: 50, speed: 1500, torque_limit: 600, goal_torque: 600, calib_torque_limit: 300, calib_step_ticks: 40, stall_load_factor: 1.5,
-  stall_time_s: 0.5, stall_backoff: 0.05}
+# Servo IDs match the bench scan (2026-10-02): fingers 0-11 (model 3082), roll 12 (model 3594).
+# The servos run in multi-turn mode (EEPROM angle limits 0/0): slack/tight are 15-bit
+# positions and may pass 0 / 4095.
+defaults:
+  accel: 50
+  speed: 1500
+  torque_limit: 600        # 0..1000 (reg 48, STS only)
+  goal_torque: 600         # HLS only, 0..1000 (reg 44)
+  calib_torque_limit: 300  # torque while finding `tight` (--torque overrides)
+  calib_step_ticks: 40     # ticks per 0.08 s step; f / s change it live (--step-ticks overrides)
+  calib_max_travel_ticks: 12288  # stop looking for `tight` after 3 turns
+  stall_load_factor: 1.5   # stall_load = load_at_tight * factor
+  stall_time_s: 0.5
+  stall_backoff: 0.05      # fraction of range to back off toward slack

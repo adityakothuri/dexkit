@@ -23,8 +23,9 @@ def hand_cfg():
     depend on how the bench servos happen to be numbered."""
     cfg = load_hand_config(REPO_ROOT / "config" / "hand.yaml")
     for i, s in enumerate(cfg.servos):
-        s.id = i + 1
-    cfg.roll.id = 13
+        s.id, s.slack, s.tight, s.inverted, s.stall_load = i + 1, 2048, 2700, False, 800
+    cfg.roll.id, cfg.roll.center, cfg.roll.inverted = 13, 2048, False
+    cfg.calibrated_at = None
     return cfg
 
 

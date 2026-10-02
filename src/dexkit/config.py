@@ -51,6 +51,9 @@ def _require(d: dict, key: str, where: str) -> Any:
 # --------------------------------------------------------------------------- hand
 
 TICKS_PER_REV = 4096
+# The bench servos run in multi-turn mode (EEPROM angle limits 0/0): positions are
+# 15-bit sign-magnitude and keep counting past 4095, so limits span several turns.
+MAX_TICKS = 0x7FFF
 
 # Feetech register map shared by STS and HLS. Address 44 differs: Goal Time on
 # STS, Goal Torque on HLS (scservo_sdk/hls.py). Override per bench verification.
@@ -146,6 +149,7 @@ class HandDefaults:
     goal_torque: int = 600
     calib_torque_limit: int = 300
     calib_step_ticks: int = 40
+    calib_max_travel_ticks: int = 3 * TICKS_PER_REV  # give up finding 'tight' after this much travel
     stall_load_factor: float = 1.5
     stall_time_s: float = 0.5
     stall_backoff: float = 0.05
@@ -185,8 +189,8 @@ class HandConfig:
             raise ConfigError(f"hand.yaml: servo_family must be one of {list(FAMILY_REGISTERS)}")
         for s in self.servos:
             for v in (s.slack, s.tight):
-                if not 0 <= v < TICKS_PER_REV:
-                    raise ConfigError(f"hand.yaml: servo {s.id} ticks {v} out of 0..4095")
+                if not -MAX_TICKS <= v <= MAX_TICKS:
+                    raise ConfigError(f"hand.yaml: servo {s.id} ticks {v} out of +/-{MAX_TICKS}")
 
     @property
     def ids(self) -> list[int]:

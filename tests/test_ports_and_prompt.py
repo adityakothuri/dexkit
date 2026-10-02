@@ -83,3 +83,30 @@ def test_garbled_bytes_do_not_crash_the_bus(hand_cfg):
     t.write = noisy_write
     bus = FeetechBus(t, timeout_s=0.002)
     assert bus.ping(1)
+
+
+def test_multi_turn_ticks_are_valid_config(hand_cfg):
+    from dexkit.config import ConfigError, hand_config_from_dict, load_yaml
+
+    raw = load_yaml(hand_cfg.source)
+    raw["servos"][0].update(slack=3604, tight=5175)  # past 4095, as measured on the bench
+    raw["servos"][1].update(slack=200, tight=-900, inverted=True)
+    cfg = hand_config_from_dict(raw)
+    assert cfg.servos[0].hi == 5175 and cfg.servos[1].lo == -900
+    raw["servos"][2].update(tight=40000)
+    with pytest.raises(ConfigError, match="out of"):
+        hand_config_from_dict(raw)
+
+
+def test_calibration_walks_past_4095(hand_cfg):
+    from dexkit.hw.feetech_hand import FeetechDriver
+    from dexkit.hw.feetech_protocol import FeetechBus
+    from dexkit.hw.mock import MockFeetechSerial, mock_servos_for
+    from dexkit.tools.calibrate_hand import ScriptedPrompter, capture_servo
+
+    servos = mock_servos_for(hand_cfg)
+    servos[0].position = 3900.0
+    t = MockFeetechSerial(servos)
+    d = FeetechDriver(FeetechBus(t, timeout_s=0.002), hand_cfg.register_map())
+    res = capture_servo(d, servos[0].id, "x", hand_cfg, ScriptedPrompter(tight_steps=20), step_delay=0.0)
+    assert res is not None and res["tight"] > 4095

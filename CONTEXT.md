@@ -31,23 +31,21 @@ dexkit-scan      # list the servos on the bus
 | Servo registers | Read from a live servo: angle limits min=max=0 (multi-turn mode), max torque (reg 16) 980, mode (reg 33) 0 on fingers, **mode 4 on the roll servo**, lock (55) = 1. A direct position write moves a finger servo correctly (200 ticks out and back). |
 | Gantry | **Not yet connected or tested.** GRBL driver only exercised in mock. |
 
-## Open problem: calibration doesn't visibly move the fingers
+## Resolved: why calibration didn't visibly move the fingers
 
-`dexkit-calibrate-hand` runs, but the operator reports the fingers do not move (earlier:
-"barely move"). A direct register write *does* spin the thumb servo (ID 0). Leading
-hypothesis, not yet confirmed: the tendon spools need more than half a turn to take up
-slack, and calibration stops early because of two limits in `capture_servo()`:
+The servos are in **multi-turn mode** (EEPROM angle limits 0/0). Verified on the thumb
+servo (ID 0): a goal of 5200 drove the position register to 5175, i.e. it counts past
+4095 instead of wrapping. The tendon spools therefore need more than one revolution, and
+the old calibration gave up long before that: it refused to pass 0/4095 (the thumb sat
+at 3604, so it quit after 12 steps) and capped travel at 2,000 ticks. The servos also
+shipped with speed register 46 = 100, so goals were followed at a crawl.
 
-- it aborts after 2,000 ticks (~176°) of travel "for safety";
-- it refuses to step past position 0 or 4095 (ID 1 sits at 4082, ID 2 at 385).
-
-The servos' EEPROM angle limits are 0/0, which on Feetech STS/HLS means multi-turn
-mode, i.e. the spools are designed to rotate more than once. If that is confirmed
-(turn a spool by hand with power off and see how far before the finger moves), the fix
-is to let calibration travel multiple turns: raise/remove the 2,000-tick cap, and handle
-positions beyond 0..4095 (the protocol encodes 15-bit magnitudes; `decode_position` /
-`encode_position` in `hw/feetech_protocol.py` already support that, but
-`config.py` validation and `TickClamp` assume 0..4095).
+Fixed (2026-10-02): config accepts 15-bit positions (`MAX_TICKS` = 32767),
+`calib_max_travel_ticks` (default 3 turns) replaces the 2,000-tick cap, the 0..4095 stop
+is gone, and calibration sets speed/accel from `defaults` before stepping.
+**Not yet re-tested on the hand after the fix.** Next step is literally
+`dexkit-calibrate-hand --servo 0` while watching the thumb: it should now keep winding
+until the finger curls, and `r` reverses if the tendon tightens the other way.
 
 Also unverified: whether the roll servo's mode 4 is a problem (mode 0 = position; the
 driver refuses to connect if mode != 0, so `dexkit-pose` will currently reject the hand

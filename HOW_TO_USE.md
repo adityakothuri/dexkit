@@ -128,6 +128,7 @@ It walks you through every motor, one at a time:
    - Finger going the wrong way? Type **`r`** + Enter to reverse.
    - Went too far? Type **`u`** + Enter to back up a little.
    - Too slow or too fast? Type **`f`** + Enter to double the speed, or **`s`** + Enter to halve it. To start faster, run `dexkit-calibrate-hand --step-ticks 80`.
+   - The motor may need **more than one full turn** before the finger starts to curl; that's normal (the spools wind up tendon slack first). It gives up after 3 turns.
    - Finger stalls part-way, or the motor strains but the finger barely moves? It may need more force: `dexkit-calibrate-hand --torque 450` (the default is 300 out of 1000).
 4. For the wrist (ID 12): twist it to the middle/neutral position by hand and press **Enter**.
 

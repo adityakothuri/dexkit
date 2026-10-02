@@ -1,6 +1,8 @@
 """Interactive per-servo calibration for the tendon-driven foam hand.
 
-Foam fingers have no hard stops, so limits come from the tendons:
+Foam fingers have no hard stops, so limits come from the tendons. The servos run in
+multi-turn mode, so a tendon spool may need more than one revolution; positions are
+15-bit and are allowed to pass 0 / 4095.
   slack  - torque off, operator pulls the finger fully open by hand, read ticks
   tight  - low torque limit, servo steps calib_step_ticks at a time while the operator
            watches; operator presses 't' at the desired tight pose ('r' reverses
@@ -22,6 +24,7 @@ from collections import deque
 from pathlib import Path
 
 from dexkit.config import (
+    MAX_TICKS,
     HandConfig,
     config_dir,
     data_dir,
@@ -89,12 +92,10 @@ def capture_servo(
         ui.say("  no position reading; skipping")
         return None
     ui.say(f"  slack = {slack}")
-    if slack < 300 or slack > 3795:
-        ui.say("  WARNING: slack is near the encoder wrap (0/4095). If the tendon range crosses it,\n"
-               "  re-center this servo's horn/offset so slack sits mid-range, then redo with --servo.")
-
     d.set_torque_limit(sid, defaults.calib_torque_limit)
     d.set_goal_torque(sid, defaults.calib_torque_limit)
+    d.set_accel(sid, defaults.accel)
+    d.set_speed(sid, defaults.speed)  # bench servos shipped with speed 100: they crawled
     d.write_position(sid, slack)
     d.set_torque(sid, True)
     ui.wait_enter("  Torque ON (low limit). Release the finger. Stepping will start; "
@@ -125,14 +126,15 @@ def capture_servo(
             d.write_position(sid, goal)
             continue
         nxt = goal + direction * step
-        if not 0 <= nxt <= 4095:
-            ui.say("  reached the encoder end (0/4095) before 't'; stopping. Re-center this servo and redo it.")
+        if abs(nxt) > MAX_TICKS:
+            ui.say(f"  reached the position limit (+/-{MAX_TICKS}) before 't'; stopping.")
             break
         history.append(goal)
         goal = nxt
         d.write_position(sid, goal)
-        if abs(goal - slack) > 2000:
-            ui.say("  moved 2000 ticks without 't'; stopping for safety")
+        if abs(goal - slack) > defaults.calib_max_travel_ticks:
+            ui.say(f"  moved {defaults.calib_max_travel_ticks} ticks ({defaults.calib_max_travel_ticks / 4096:.1f} turns) "
+                   "without 't'; stopping for safety (calib_max_travel_ticks in hand.yaml)")
             break
     time.sleep(0.2)
     tight = d.read_position(sid)
