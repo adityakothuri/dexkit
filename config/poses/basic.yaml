@@ -1,0 +1,18 @@
+# DexKit pose library, one file per group; every *.yaml in this folder is loaded.
+# `fingers` is a list of 12 values in [0,1] (channel order from hand.yaml) or a mapping.
+# Mapping keys, most specific wins: tendon name (thumb_flex, index_extend, ...)
+# > finger (thumb, index, middle, ring, pinky) > role (flex, extend, adduct) > default.
+# 0 = tendon relaxed, 1 = fully pulled (the calibrated limit). A finger's flexor and
+# extensor are antagonists: keep flex + extend <= 1 per finger. `roll` is degrees.
+
+poses:
+  relax:     {fingers: {default: 0.0}, roll: 0}
+  open:      {fingers: {default: 0.0, extend: 0.3}, roll: 0}
+  open_wide: {fingers: {default: 0.0, extend: 0.7}, roll: 0}
+  fist:      {fingers: {default: 0.0, flex: 1.0}, roll: 0}
+  point:     {fingers: {default: 0.0, flex: 1.0, index_flex: 0.0, index_extend: 0.5}, roll: 0}
+  thumbs_up: {fingers: {default: 0.0, flex: 1.0, thumb_flex: 0.0, thumb_extend: 0.5}, roll: 0}
+  wave_a:    {fingers: {default: 0.0, index_flex: 0.4, ring_flex: 0.4}, roll: 20}
+  wave_b:    {fingers: {default: 0.0, middle_flex: 0.4, pinky_flex: 0.4}, roll: -20}
+# Generated automatically: finger_1_curl .. finger_12_curl (channel N-1 at 1.0) and one
+# <tendon>_only pose per tendon (e.g. pinky_flex_only), for choreography.

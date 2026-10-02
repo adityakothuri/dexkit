@@ -287,7 +287,10 @@ dexkit-run examples/count_to_five.yaml
 dexkit-run examples/rock_paper_scissors.yaml
 dexkit-run examples/wave_hello.yaml
 dexkit-run --loop 3 examples/finger_ripple.yaml   # --loop N repeats; 0 = until Ctrl+C
+dexkit-run examples/team_7503.yaml            # 7 - 5 - 0 - 3, with a fist between digits
 ```
+
+**Too fast?** Every command takes `--speed-scale S` (e.g. `dexkit-run --speed-scale 0.5 examples/team_7503.yaml` runs the hand at half speed). The permanent setting is `speed:` (and `accel:`) under `defaults:` in `config/hand.yaml`; it's 800 now (was 1500, which strained the tendons).
 
 Write the steps in a file. Start by copying `examples/pick_and_show.yaml`:
 
@@ -315,15 +318,26 @@ The gantry must be zeroed first (Way 1 or Way 2), or answer `y` to "Restore save
 
 ---
 
-## Making your own poses
+## The pose library
 
-There are two ways:
+Poses live in `config/poses/`, one file per group, and every file in that folder is loaded:
 
-- **Easiest:** in `dexkit-pose`, shape the hand with `f` and `roll` commands until it looks right, then type `save wave`. Now `wave` is a pose everywhere.
-- **By editing a file:** open `config/poses.yaml` and add a line. Values go from 0 (open) to 1 (curled), and `default` covers every finger you don't name:
+| file | poses |
+|---|---|
+| `basic.yaml` | relax, open, open_wide, fist, point, thumbs_up, wave_a, wave_b |
+| `signs.yaml` | peace, rock_on, shaka, spidey, finger_gun, ok |
+| `digits.yaml` | zero, one, two, three, four, five, seven |
+| `grasps.yaml` | pinch, claw, tripod, cross_thumb |
+| `custom.yaml` | whatever you save from the prompt |
+
+`dexkit-pose --list` prints them grouped by file. To make your own:
+
+- **Easiest:** in `dexkit-pose`, shape the hand with `f` and `roll` until it looks right, then `save wave`. It goes into `custom.yaml` and `wave` works everywhere.
+- **By editing a file:** add a line to any file in `config/poses/` (or a new file). Keys are tendon names, finger names, or roles; 0 = relaxed, 1 = fully pulled; keep flex + extend ≤ 1 on one finger:
   ```yaml
-  peace: {fingers: {default: 1.0, index: 0.0, middle: 0.0}, roll: 0}
+  six: {fingers: {default: 0.0, extend: 0.4, ring_flex: 1.0, thumb_flex: 0.8, thumb_adduct: 0.6}, roll: 0}
   ```
+- A pose can't have the same name in two files; the tool tells you if it does. With `--gantry`, the gantry command `zero` wins over the pose; type `pose zero` for the digit.
 
 ---
 

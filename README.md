@@ -21,7 +21,7 @@ src/dexkit/
   tools/     scan_bus.py, calibrate_hand.py, calibrate_gantry.py, estop.py
   policy/    model/ (verbatim from diff_foam), dataset.py, train.py, infer.py, collect.py, smoke.py
   ros/       bridge_node.py  (optional, rclpy imported lazily)
-config/      hand.yaml, gantry.yaml, poses.yaml, policy.yaml
+config/      hand.yaml, gantry.yaml, poses/*.yaml (pose library, one file per group), policy.yaml
 scripts/     99-dexkit.rules
 examples/    pick_and_show.yaml
 ```
@@ -65,7 +65,7 @@ make policy-smoke  # synthetic data -> train 2 epochs -> infer 20 steps (GPU: cu
 
 ## Commands
 
-Every command accepts `--mock` (simulated hardware), `--yes` (skip the `go` prompt) and `-v` (debug logging, including serial bytes).
+Every command accepts `--mock` (simulated hardware), `--yes` (skip the `go` prompt), `--speed-scale S` (slow the hand down uniformly) and `-v` (debug logging, including serial bytes).
 
 | Command | What it does |
 |---|---|

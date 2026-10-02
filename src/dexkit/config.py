@@ -166,8 +166,8 @@ class RollConfig:
 
 @dataclass
 class HandDefaults:
-    accel: int = 50
-    speed: int = 1500
+    accel: int = 20  # servo acceleration register (reg 41); lower = gentler
+    speed: int = 800  # servo speed register (reg 46), ticks/s (~1 turn per 5 s). 1500 strained the tendons
     torque_limit: int = 600
     goal_torque: int = 600
     calib_torque_limit: int = 300

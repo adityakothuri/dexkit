@@ -58,35 +58,65 @@ def resolve_fingers(
     return out
 
 
+POSES_DIRNAME = "poses"
+CUSTOM_FILE = "custom.yaml"  # where `save NAME` at the pose prompt writes
+
+
+def pose_files(path: str | Path | None = None) -> list[Path]:
+    """The pose library: every *.yaml in config/poses/ (sorted), plus a legacy config/poses.yaml.
+    `path` may name one file or a directory instead."""
+    if path is not None:
+        p = Path(path)
+        return sorted(p.glob("*.yaml")) if p.is_dir() else [p]
+    cfg = config_dir()
+    files = sorted((cfg / POSES_DIRNAME).glob("*.yaml")) if (cfg / POSES_DIRNAME).is_dir() else []
+    legacy = cfg / "poses.yaml"
+    if legacy.exists():
+        files.append(legacy)
+    return files
+
+
 class PoseLibrary:
-    def __init__(self, poses: dict[str, Pose], path: Path | None = None) -> None:
+    def __init__(self, poses: dict[str, Pose], path: Path | None = None,
+                 sources: dict[str, str] | None = None) -> None:
         self.poses = poses
-        self.path = path
+        self.path = path  # where saves go
+        self.sources = sources or {}  # pose name -> file stem ("basic", "digits", "generated", ...)
 
     @classmethod
     def load(cls, hand_cfg: HandConfig, path: str | Path | None = None) -> PoseLibrary:
-        p = Path(path) if path else config_dir() / "poses.yaml"
-        data = load_yaml(p).get("poses") or {}
+        files = pose_files(path)
         names = hand_cfg.names
         groups = [s.finger for s in hand_cfg.servos]
         roles = [s.role for s in hand_cfg.servos]
         poses: dict[str, Pose] = {}
-        for name, d in data.items():
-            try:
-                poses[name] = Pose(resolve_fingers(d.get("fingers", {}), names, groups, roles),
-                                   float(d.get("roll", 0.0)))
-            except (ValueError, TypeError) as e:
-                raise ValueError(f"{p}: pose '{name}': {e}") from e
+        sources: dict[str, str] = {}
+        for p in files:
+            data = load_yaml(p).get("poses") or {}
+            for name, d in data.items():
+                if name in poses:
+                    raise ValueError(f"{p}: pose '{name}' is already defined in {sources[name]}.yaml")
+                try:
+                    poses[name] = Pose(resolve_fingers(d.get("fingers", {}), names, groups, roles),
+                                       float(d.get("roll", 0.0)))
+                except (ValueError, TypeError) as e:
+                    raise ValueError(f"{p}: pose '{name}': {e}") from e
+                sources[name] = p.stem
         for i, s in enumerate(hand_cfg.servos):
             f = np.zeros(N_FINGERS)
             f[i] = 1.0
-            poses.setdefault(f"finger_{i + 1}_curl", Pose(f, 0.0))
-            if s.name in TENDONS:  # by tendon name, independent of channel wiring
-                poses.setdefault(f"{s.name}_only", Pose(f.copy(), 0.0))
+            for key in (f"finger_{i + 1}_curl", f"{s.name}_only" if s.name in TENDONS else None):
+                if key and key not in poses:  # by tendon name, independent of channel wiring
+                    poses[key] = Pose(f.copy(), 0.0)
+                    sources[key] = "generated"
         if hand_cfg.unassigned:
             log.warning("servo channels %s are not assigned to a tendon yet; poses only drive the assigned ones",
                         hand_cfg.unassigned)
-        return cls(poses, p)
+        if path is not None and not Path(path).is_dir():
+            save_to = Path(path)
+        else:
+            save_to = (Path(path) if path is not None else config_dir() / POSES_DIRNAME) / CUSTOM_FILE
+        return cls(poses, save_to, sources)
 
     def __contains__(self, name: str) -> bool:
         return name in self.poses
@@ -100,15 +130,18 @@ class PoseLibrary:
         return sorted(self.poses)
 
     def save_pose(self, name: str, pose: Pose, path: str | Path | None = None) -> None:
-        """Write one pose into poses.yaml, keeping the others as written."""
+        """Write one pose into the custom file (config/poses/custom.yaml), keeping the others as written."""
         p = Path(path) if path else self.path
         if p is None:
-            raise ValueError("no poses.yaml path")
+            raise ValueError("no pose file to save into")
+        if name in self.sources and self.sources[name] not in (p.stem, "generated"):
+            raise ValueError(f"'{name}' is defined in {self.sources[name]}.yaml; pick another name or edit that file")
         data = load_yaml(p) if p.exists() else {}
         data.setdefault("poses", {})
         data["poses"][name] = pose.to_yaml()
-        dump_yaml(data, p, header="# Named hand poses (see comments in the shipped file for the format).\n")
+        dump_yaml(data, p, header="# Poses saved from the dexkit-pose prompt (`save NAME`). Edit freely.\n")
         self.poses[name] = pose
+        self.sources[name] = p.stem
 
 
 def min_jerk(alpha: np.ndarray | float) -> np.ndarray | float:
@@ -137,6 +170,8 @@ def go_to_pose(
     on_tick: Callable[[Pose], None] | None = None,
     rate: Rate | None = None,
     max_settle_ticks: int = 100,
+    arrive_timeout_s: float = 12.0,
+    arrive_tol: float = 0.05,
 ) -> Pose:
     f, r = hand.last_command
     start = Pose(f, r)
@@ -160,6 +195,22 @@ def go_to_pose(
             break
         prev_f, prev_r = f, r
         rate.sleep()
+    # The servos follow at their own speed register; wait until they have actually arrived
+    # (within arrive_tol of what was sent) so the next step starts from a formed pose.
+    if arrive_timeout_s > 0:
+        deadline = time.monotonic() + arrive_timeout_s
+        while True:
+            estop.check()
+            st = hand.get_state()
+            if (np.max(np.abs(np.clip(st.fingers, 0, 1) - prev_f)) < arrive_tol
+                    and abs(st.roll_deg - prev_r) < 3.0):
+                break
+            if time.monotonic() > deadline:
+                log.warning("pose not reached within %.0fs (max finger error %.2f); continuing",
+                            arrive_timeout_s, float(np.max(np.abs(np.clip(st.fingers, 0, 1) - prev_f))))
+                break
+            hand.set_targets(prev_f, prev_r)  # keep commanding; also keeps the safety checks running
+            rate.sleep()
     return pose
 
 
@@ -173,9 +224,10 @@ def current_pose(hand: HandInterface) -> Pose:
 
 INTERACTIVE_HELP = """commands:
   <pose name>          move to a pose (e.g. open, fist, peace, rock_on, pinky_flex_only)
+  pose <name>          same, for a pose that shares a name with a command (e.g. `pose zero`)
   f <N> <value>        set finger servo N (1-12) to value 0..1
   roll <deg>           set forearm roll in degrees
-  save <name>          save the current commanded pose to poses.yaml
+  save <name>          save the current commanded pose to config/poses/custom.yaml
   list                 list poses
   state                print measured finger values, roll, voltage, load
   home                 torque off, you pull every finger fully open, Enter: that becomes 'open'
@@ -276,12 +328,13 @@ def interactive(hand: HandInterface, lib: PoseLibrary, rate_hz: float, duration:
             elif cmd == "roll" and len(parts) == 2:
                 f, _ = hand.last_command
                 go_to_pose(hand, Pose(f, float(parts[1])), duration, rate_hz, mode, estop=estop)
-            elif cmd in lib:
-                go_to_pose(hand, lib[cmd], duration, rate_hz, mode, estop=estop)
-                f, r = hand.last_command
-                print(f"-> {cmd}: commanded {np.round(f, 2).tolist()} roll {r:+.1f}")
             elif gantry is not None and gantry_command(gantry, parts, estop):
-                pass
+                pass  # gantry commands win over a pose of the same name (e.g. `zero`); use `pose zero`
+            elif cmd in lib or (cmd == "pose" and len(parts) == 2 and parts[1] in lib):
+                name = parts[1] if cmd == "pose" else cmd
+                go_to_pose(hand, lib[name], duration, rate_hz, mode, estop=estop)
+                f, r = hand.last_command
+                print(f"-> {name}: commanded {np.round(f, 2).tolist()} roll {r:+.1f}")
             else:
                 print(f"unknown command or pose '{line}' (type help, list or quit)")
         except (ValueError, IndexError) as e:
@@ -315,9 +368,14 @@ def main(argv: list[str] | None = None) -> None:
 
     lib = PoseLibrary.load(load_hand_config())
     if args.list:
+        by_file: dict[str, list[str]] = {}
         for n in lib.names():
-            pose = lib[n]
-            print(f"{n:16s} roll {pose.roll:+6.1f}  {np.round(pose.fingers, 2).tolist()}")
+            by_file.setdefault(lib.sources.get(n, "?"), []).append(n)
+        for src in sorted(by_file, key=lambda k: (k == "generated", k)):
+            print(f"[{src}]")
+            for n in by_file[src]:
+                pose = lib[n]
+                print(f"  {n:20s} roll {pose.roll:+6.1f}  {np.round(pose.fingers, 2).tolist()}")
         return
     if args.name and args.name not in lib:
         p.error(f"unknown pose '{args.name}'. Known: {', '.join(lib.names())}")

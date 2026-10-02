@@ -58,15 +58,20 @@ def test_resolve_fingers_precedence():
 def test_yaml_round_trip(hand_cfg, tmp_path):
     import shutil
 
-    p = tmp_path / "poses.yaml"
-    shutil.copy(hand_cfg.source.parent / "poses.yaml", p)
-    lib = PoseLibrary.load(hand_cfg, p)
+    d = tmp_path / "poses"
+    shutil.copytree(hand_cfg.source.parent / "poses", d)  # the library is a folder of files
+    lib = PoseLibrary.load(hand_cfg, d)
     pose = Pose(np.linspace(0, 1, 12), 12.5)
-    lib.save_pose("custom", pose)
-    lib2 = PoseLibrary.load(hand_cfg, p)
-    assert np.allclose(lib2["custom"].fingers, pose.fingers, atol=1e-4)
-    assert lib2["custom"].roll == pytest.approx(12.5)
-    assert np.allclose(lib2["pinch"].fingers, lib["pinch"].fingers)
+    lib.save_pose("my_pose", pose)  # goes to custom.yaml
+    lib2 = PoseLibrary.load(hand_cfg, d)
+    assert np.allclose(lib2["my_pose"].fingers, pose.fingers, atol=1e-4)
+    assert lib2["my_pose"].roll == pytest.approx(12.5) and lib2.sources["my_pose"] == "custom"
+    assert np.allclose(lib2["pinch"].fingers, lib["pinch"].fingers) and lib2.sources["pinch"] == "grasps"
+    with pytest.raises(ValueError, match="defined in"):
+        lib2.save_pose("pinch", pose)  # cannot shadow a pose from another file
+    (d / "dup.yaml").write_text("poses:\n  fist: {fingers: {default: 0.0}}\n")
+    with pytest.raises(ValueError, match="already defined"):
+        PoseLibrary.load(hand_cfg, d)
 
 
 def test_interpolation_endpoints_exact():

@@ -31,6 +31,8 @@ def common_parser(description: str) -> argparse.ArgumentParser:
     p.add_argument("--verbose", "-v", action="store_true", help="debug logging, including serial bytes")
     p.add_argument("--config-dir", default=None, help="directory holding hand.yaml / gantry.yaml / poses.yaml")
     p.add_argument("--mock-speed", type=float, default=1.0, help="mock gantry time multiplier")
+    p.add_argument("--speed-scale", type=float, default=1.0, metavar="S",
+                   help="scale hand speed, accel and per-tick step by S (0.1-1.0; e.g. 0.5 = half speed)")
     return p
 
 
@@ -95,6 +97,7 @@ def open_session(
     try:
         if need_hand:
             s.hand_cfg = load_hand_config()
+            apply_speed_scale(s.hand_cfg, getattr(args, "speed_scale", 1.0))
             if require_calibration and not mock and not s.hand_cfg.is_calibrated:
                 raise SafetyTrip(f"{s.hand_cfg.source}: servos {s.hand_cfg.uncalibrated_ids} are not calibrated; "
                                  "run dexkit-calibrate-hand (it skips the ones already done)")
@@ -160,6 +163,21 @@ def open_session(
             print("aborted")
             sys.exit(1)
     return s
+
+
+def apply_speed_scale(cfg: HandConfig, scale: float) -> None:
+    """Slow the hand down uniformly: servo speed and accel registers plus the per-tick step limit."""
+    if not 0.05 <= scale <= 1.0:
+        raise ValueError("--speed-scale must be between 0.05 and 1.0")
+    if scale == 1.0:
+        return
+    cfg.defaults.speed = max(20, int(cfg.defaults.speed * scale))
+    cfg.defaults.accel = max(1, int(cfg.defaults.accel * scale))
+    for servo in cfg.servos:
+        servo.max_delta_ticks = max(2, int(servo.max_delta_ticks * scale))
+    cfg.roll.max_delta_ticks = max(2, int(cfg.roll.max_delta_ticks * scale))
+    log.info("speed scale %.2f: speed %d, accel %d, step %d ticks/tick", scale, cfg.defaults.speed,
+             cfg.defaults.accel, cfg.servos[0].max_delta_ticks)
 
 
 def establish_frame(s: Session, args: argparse.Namespace, prompt: Prompt) -> None:

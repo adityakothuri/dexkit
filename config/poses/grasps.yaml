@@ -1,0 +1,7 @@
+# Grasps.
+
+poses:
+  pinch:       {fingers: {default: 0.0, thumb_flex: 0.8, index_flex: 0.8, thumb_adduct: 0.6, index_adduct: 0.6}, roll: 0}
+  claw:        {fingers: {default: 0.0, flex: 0.5}, roll: 0}
+  tripod:      {fingers: {default: 0.0, thumb_flex: 0.7, index_flex: 0.7, middle_flex: 0.7, thumb_adduct: 0.5}, roll: 0}
+  cross_thumb: {fingers: {default: 0.0, flex: 1.0, thumb_adduct: 0.8}, roll: 0}

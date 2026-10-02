@@ -1,0 +1,22 @@
+# Team 7503: show the digits 7, 5, 0, 3 one at a time. Hand only.
+# Slow and deliberate: closes to a fist between digits so each one reads clearly.
+name: team_7503
+steps:
+  - {pose: fist, duration: 1.5}
+  - {wait: 0.5}
+  - {pose: seven, duration: 1.5}
+  - {wait: 1.5}
+  - {pose: fist, duration: 1.2}
+  - {wait: 0.4}
+  - {pose: five, duration: 1.5}
+  - {wait: 1.5}
+  - {pose: fist, duration: 1.2}
+  - {wait: 0.4}
+  - {pose: zero, duration: 1.5}
+  - {wait: 1.5}
+  - {pose: fist, duration: 1.2}
+  - {wait: 0.4}
+  - {pose: three, duration: 1.5}
+  - {wait: 1.5}
+  - {pose: fist, duration: 1.2}
+  - {pose: relax, duration: 1.0}

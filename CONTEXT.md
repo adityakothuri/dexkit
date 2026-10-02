@@ -128,6 +128,18 @@ wrist (ch 12) remains. Every tendon winds toward higher counts (`inverted: false
 | 12 | | forearm roll | wrist twist |
 
 
+## Poses, choreography, speed (2026-10-02)
+
+- Pose library is `config/poses/*.yaml` (basic/signs/digits/grasps/custom), merged by
+  `PoseLibrary.load`; duplicate names across files are an error; `save` writes custom.yaml.
+- Sequences in `examples/`: show_off, count_to_five, rock_paper_scissors, wave_hello,
+  finger_ripple, **team_7503** (7-5-0-3 with a fist between digits). `dexkit-run --loop N`.
+- `go_to_pose` now waits for the servos to physically arrive (tolerance 0.05, 12 s timeout)
+  before returning, so sequences hold their timing at any speed.
+- Speed: `defaults.speed` 1500 -> 800, accel 50 -> 20, `max_delta_ticks` 120 -> 80 after the
+  operator reported fast motion straining the hand; `--speed-scale S` scales all three per run.
+  Note `pinky_flex` has a 2-turn span (8149 ticks): a full curl takes ~10 s at 800.
+
 ## Hardware notes
 
 - The hand can be calibrated and driven **off the gantry**; hand and gantry configs are

@@ -48,7 +48,7 @@ def test_go_to_pose_settles_fast_when_antagonists_scale(mock_hand, hand_cfg, est
     f[names.index("index_extend")] = 0.8  # sums to 1.8: the driver will scale it to 1.0
     fast = Rate(1000, sleep=lambda _s: None)
     before = len(mock_hand.calls)
-    go_to_pose(mock_hand, Pose(f, 0.0), 0.2, 50, estop=estop, rate=fast)
+    go_to_pose(mock_hand, Pose(f, 0.0), 0.2, 50, estop=estop, rate=fast, arrive_timeout_s=0)  # settle loop only
     moves = len(mock_hand.calls) - before  # 10 trajectory ticks + a few slew-limited settle ticks
     assert moves < 40, f"settle loop sent {moves} packets: it ran to its cap instead of stopping once nothing changes"
     got, _ = mock_hand.last_command
@@ -66,3 +66,31 @@ def test_calibration_stall_floor_is_above_normal_holding_load(hand_cfg):
     d = FeetechDriver(FeetechBus(t, timeout_s=0.002), hand_cfg.register_map())
     res = capture_servo(d, servos[0].id, "x", hand_cfg, ScriptedPrompter(tight_steps=10), step_delay=0.0)
     assert res["stall_load"] >= 400, "holding at goal_torque 600 must not look like a stall"
+
+
+def test_go_to_pose_waits_for_servos_to_arrive(hand_cfg, estop):
+    """Sequences must not start the next step before the servos have physically reached the pose."""
+    from dexkit.hw.mock import MockFeetechSerial, MockHand, mock_servos_for
+
+    servos = mock_servos_for(hand_cfg)
+    for s in servos:
+        s.speed_tps = 1500.0  # slow simulated servos
+    h = MockHand(hand_cfg, latency_s=0, bus=MockFeetechSerial(servos))
+    h.connect()
+    go_to_pose(h, Pose(_fist(hand_cfg), 0.0), 0.1, 50, estop=estop, rate=Rate(1000, sleep=lambda _s: None))
+    st = h.get_state()
+    assert np.max(np.abs(np.clip(st.fingers, 0, 1) - _fist(hand_cfg))) < 0.06
+    h.close()
+
+
+def test_speed_scale_slows_everything(hand_cfg):
+    from dexkit.cli import apply_speed_scale
+
+    speed, accel = hand_cfg.defaults.speed, hand_cfg.defaults.accel
+    steps = [s.max_delta_ticks for s in hand_cfg.servos] + [hand_cfg.roll.max_delta_ticks]
+    apply_speed_scale(hand_cfg, 0.5)
+    assert hand_cfg.defaults.speed == speed // 2 and hand_cfg.defaults.accel == accel // 2
+    after = [s.max_delta_ticks for s in hand_cfg.servos] + [hand_cfg.roll.max_delta_ticks]
+    assert after == [max(2, b // 2) for b in steps]
+    with pytest.raises(ValueError):
+        apply_speed_scale(hand_cfg, 3.0)

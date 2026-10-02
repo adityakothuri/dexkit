@@ -1,0 +1,9 @@
+# Hand signs (right hand). Per finger: flex OR extend, never both high.
+
+poses:
+  peace:      {fingers: {default: 0.0, index_extend: 0.5, middle_extend: 0.5, ring_flex: 1.0, pinky_flex: 1.0, thumb_flex: 0.8, thumb_adduct: 0.5}, roll: 0}
+  rock_on:    {fingers: {default: 0.0, index_extend: 0.5, pinky_extend: 0.5, middle_flex: 1.0, ring_flex: 1.0, thumb_flex: 0.8, thumb_adduct: 0.5}, roll: 0}
+  shaka:      {fingers: {default: 0.0, thumb_extend: 0.5, pinky_extend: 0.5, index_flex: 1.0, middle_flex: 1.0, ring_flex: 1.0}, roll: 0}
+  spidey:     {fingers: {default: 0.0, index_extend: 0.5, pinky_extend: 0.5, thumb_extend: 0.5, middle_flex: 1.0, ring_flex: 1.0}, roll: 0}
+  finger_gun: {fingers: {default: 0.0, index_extend: 0.5, thumb_extend: 0.6, middle_flex: 1.0, ring_flex: 1.0, pinky_flex: 1.0}, roll: 0}
+  ok:         {fingers: {default: 0.0, thumb_flex: 0.7, index_flex: 0.7, thumb_adduct: 0.5}, roll: 0}
