@@ -55,9 +55,10 @@ prompt re-bases later. `hand.yaml` carries per-servo `calibrated:` flags; servo 
 `dexkit-calibrate-hand --servo 0` while watching the thumb: it should now keep winding
 until the finger curls, and `r` reverses if the tendon tightens the other way.
 
-Also unverified: whether the roll servo's mode 4 is a problem (mode 0 = position; the
-driver refuses to connect if mode != 0, so `dexkit-pose` will currently reject the hand
-until this is understood or the mode is changed).
+Roll servo mode: an early dump showed register 33 = 4, but with the servo plugged in on
+its own it reads 0 (position mode) consistently, and a +100-tick test turn at torque 300
+moved it 441 -> 542 -> 442 with load 3. No change was made. The earlier 4 was most
+likely a misread (the 70-byte block read fell back to 64 bytes that day).
 
 Diagnostic snippets that proved useful are in the git history of this file's author's
 session; the simplest is:
