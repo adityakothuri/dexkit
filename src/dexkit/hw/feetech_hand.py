@@ -266,6 +266,17 @@ class FeetechHand(HandInterface):
         log.info("hand re-based: open = %s, roll center = %d", slack.astype(int).tolist(), self.roll.center)
         self._save_positions(present)
 
+    def rebase_partial(self, present: dict[int, int], ids: list[int]) -> None:
+        """Current position becomes 'open' for the given servos only; others keep their open."""
+        slack = self._slack.copy()
+        for i, s in enumerate(self.cfg.servos):
+            if s.id in ids:
+                slack[i] = present[s.id]
+        self._set_slack(slack, self.roll)
+        self._last_ticks = np.array([present[sid] for sid in self.ids], dtype=np.int64)
+        self._last_cmd = (np.zeros(N_FINGERS), self.roll.ticks_to_deg(int(present[self.cfg.roll.id])))
+        self._save_positions(present)
+
     def restore_or_rebase(self, present: dict[int, int]) -> None:
         """Recover each finger's absolute open position from the last session.
 

@@ -282,3 +282,24 @@ def test_relax_after_close_is_a_noop(mock_hand):
     mock_hand.close()
     mock_hand.relax()  # must not raise or log a port error
     assert mock_hand.driver is None and not mock_hand.torque_on
+
+
+def test_reverse_assist_unwinds_and_records_open(hand_cfg, monkeypatch):
+    """--unwind steps the chosen tendons in the release direction, stops on a key, saves open."""
+    from dexkit.hw.feetech_hand import load_positions_state
+    from dexkit.hw.mock import MockHand
+    from dexkit.tools import relax
+
+    h = MockHand(hand_cfg, latency_s=0)
+    h.connect()
+    s0 = hand_cfg.servos[0]
+    presses = iter([None] * 30 + [b"k"])
+    monkeypatch.setattr(relax, "_key_reader", lambda: ((lambda _t: next(presses, b"k")), (lambda: None)))
+    relax.unwind(h, [s0.name], rate_hz=20)  # ~1.5 s of unwinding at 350 ticks/s
+    goal = h.bus_sim.servos[s0.id].goal
+    assert goal < s0.slack  # moved in the release direction
+    saved = load_positions_state()["servos"][str(s0.id)]
+    assert abs(saved["slack"] - goal) < 60  # recorded where the servo actually got to
+    assert h._slack[0] < s0.slack  # open re-based for that tendon only
+    assert h._slack[1] == hand_cfg.servos[1].slack
+    h.close()
