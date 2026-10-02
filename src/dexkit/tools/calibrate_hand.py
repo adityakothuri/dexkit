@@ -28,6 +28,7 @@ from pathlib import Path
 from dexkit.config import (
     MAX_TICKS,
     TENDONS,
+    ConfigError,
     HandConfig,
     config_dir,
     data_dir,
@@ -240,7 +241,11 @@ def main(argv: list[str] | None = None) -> None:
             print(f"servo {args.servo} is not in hand.yaml (IDs {cfg.ids})")
             sys.exit(2)
         apply_label(by_id[args.servo], args.name, args.finger)
-        hand_config_from_dict(raw)
+        try:
+            hand_config_from_dict(raw)
+        except ConfigError as e:
+            print(f"refused: {e}")
+            sys.exit(2)
         dump_yaml(raw, out, header=HEADER)
         print(f"servo {args.servo} -> {args.name}; wrote {out}")
         print_wiring(load_hand_config(out))

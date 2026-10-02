@@ -191,7 +191,7 @@ def test_antagonist_pairs_are_limited(hand_cfg):
 
 
 def test_canonical_name_sets_finger_and_role_and_label_only(tmp_path):
-    from dexkit.config import ServoConfig, load_hand_config
+    from dexkit.config import TENDONS, ServoConfig, load_hand_config
     from dexkit.tools.calibrate_hand import main
 
     s = ServoConfig(id=0, name="index_extend", slack=0, tight=100)
@@ -199,8 +199,11 @@ def test_canonical_name_sets_finger_and_role_and_label_only(tmp_path):
     out = tmp_path / "hand.yaml"
     main(["--mock", "--scripted", "--servo", "3", "--out", str(out)])
     before = load_hand_config(out)
-    main(["--mock", "--label-only", "--servo", "3", "--name", "ring_extend", "--out", str(out)])
+    taken = next(s.name for s in before.servos if s.id != 3 and s.name in TENDONS)
+    with pytest.raises(SystemExit):  # a tendon name already on another channel is refused
+        main(["--mock", "--label-only", "--servo", "3", "--name", taken, "--out", str(out)])
+    main(["--mock", "--label-only", "--servo", "3", "--name", "spare_x", "--finger", "ring", "--out", str(out)])
     after = load_hand_config(out)
     s3 = next(s for s in after.servos if s.id == 3)
-    assert (s3.name, s3.finger, s3.role, s3.calibrated) == ("ring_extend", "ring", "extend", True)
+    assert (s3.name, s3.finger, s3.role, s3.calibrated) == ("spare_x", "ring", "", True)
     assert s3.slack == next(s for s in before.servos if s.id == 3).slack
