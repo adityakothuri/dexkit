@@ -104,8 +104,25 @@ print(d.read_position(0), d.read_load(0), d.read_mode(12))
 scales a pair so it never sums past 1.0 (`AntagonistLimit`). Canonical names in
 `config.TENDONS` set `finger`/`role`; `dexkit-calibrate-hand --wiring` prints the
 channel table; `--label-only --name X` labels a calibrated channel without moving it.
-As of this note: ch 0 = `pinky_flex` (observed curl; confirm it is the palm-side
-tendon), ch 1–6 calibrated but unlabelled, ch 7–12 not yet calibrated.
+**Wiring confirmed on the bench (2026-10-02), all 12 hand channels calibrated;** only the
+wrist (ch 12) remains. Every tendon winds toward higher counts (`inverted: false`).
+
+| ch | lab's name | code name | motion |
+|---|---|---|---|
+| 0 | pinky_curl | `pinky_flex` | pinky curls in |
+| 1 | thumb_back | `thumb_extend` | thumb bends back |
+| 2 | ring_curl | `ring_flex` | ring curls in |
+| 3 | pointer_turn | `index_adduct` | index curls toward the thumb |
+| 4 | point_curl | `index_flex` | index curls in |
+| 5 | middle_back | `middle_extend` | middle bends back |
+| 6 | middle_curl | `middle_flex` | middle curls in |
+| 7 | pointer_back | `index_extend` | index bends back |
+| 8 | thumb_curl | `thumb_flex` | thumb curls to the upper palm |
+| 9 | ring_back | `ring_extend` | ring bends back |
+| 10 | thumb_turn | `thumb_adduct` | thumb turns in toward mid-palm |
+| 11 | pinky_back | `pinky_extend` | pinky bends back |
+| 12 | | forearm roll | wrist twist |
+
 
 ## Hardware notes
 

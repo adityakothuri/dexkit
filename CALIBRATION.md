@@ -28,6 +28,24 @@ Finger names: `thumb`, `index`, `middle`, `ring`, `pinky`. So the 12 names are:
 
 Motor 12 is the wrist.
 
+This hand's wiring, as confirmed on the bench (the lab's own names on the left):
+
+| ch | lab's name | code name | motion |
+|---|---|---|---|
+| 0 | pinky_curl | `pinky_flex` | pinky curls in |
+| 1 | thumb_back | `thumb_extend` | thumb bends back |
+| 2 | ring_curl | `ring_flex` | ring curls in |
+| 3 | pointer_turn | `index_adduct` | index curls toward the thumb |
+| 4 | point_curl | `index_flex` | index curls in |
+| 5 | middle_back | `middle_extend` | middle bends back |
+| 6 | middle_curl | `middle_flex` | middle curls in |
+| 7 | pointer_back | `index_extend` | index bends back |
+| 8 | thumb_curl | `thumb_flex` | thumb curls to the upper palm |
+| 9 | ring_back | `ring_extend` | ring bends back |
+| 10 | thumb_turn | `thumb_adduct` | thumb turns in toward mid-palm |
+| 11 | pinky_back | `pinky_extend` | pinky bends back |
+| 12 | | forearm roll | wrist twist |
+
 ## For each hand motor (ID 0 to 11)
 
 ### Step 1: see what it moves
