@@ -30,6 +30,7 @@ from dexkit.config import (
     TENDONS,
     ConfigError,
     HandConfig,
+    ServoConfig,
     config_dir,
     data_dir,
     dump_yaml,
@@ -164,6 +165,68 @@ def capture_tight_from_open(
         ui.end_keys()
 
 
+AUTO_LOAD_STOP = 220       # present-load (0..1000) that means "the finger is resisting"
+AUTO_LAG_STOP = 160        # goal - position gap that means "the servo cannot keep up" (stalled)
+AUTO_BACKOFF = 0.08        # record the limit this fraction of the travel short of the stall point
+AUTO_STEP_TICKS = 24
+AUTO_STEP_S = 0.1
+AUTO_MAX_FRACTION = 1.15   # never travel more than this times the previous span
+
+
+def auto_tight_from_open(d: FeetechDriver, s: ServoConfig, cfg: HandConfig, open_pos: int, say) -> dict | None:
+    """Find the curl limit without an operator: wind from open at calibration torque and stop where
+    the load rises or the servo stalls. Checks the dexkit-estop flag every step."""
+    from dexkit.hw.safety import estop_flag_path
+
+    defaults = cfg.defaults
+    sid, sign = s.id, (1 if s.span >= 0 else -1)
+    cap = int(AUTO_MAX_FRACTION * max(abs(s.span), 600))
+    d.set_goal_torque(sid, defaults.calib_torque_limit)
+    d.set_torque_limit(sid, defaults.calib_torque_limit)
+    d.set_accel(sid, defaults.accel)
+    d.set_speed(sid, 400)
+    d.write_position(sid, open_pos)
+    d.set_torque(sid, True)
+    time.sleep(0.6)
+    goal, hits, log = open_pos, 0, []
+    reason = "cap"
+    while abs(goal - open_pos) < cap:
+        if estop_flag_path().exists():
+            d.set_torque_all(cfg.ids, False)
+            raise EStopTripped("dexkit-estop flag set during auto calibration")
+        goal += sign * AUTO_STEP_TICKS
+        d.write_position(sid, goal)
+        time.sleep(AUTO_STEP_S)
+        pos = d.read_position(sid)
+        load = d.read_load(sid) or 0
+        if pos is None:
+            continue
+        lag = abs(goal - pos)
+        log.append((abs(goal - open_pos), load, lag))
+        hits = hits + 1 if load >= AUTO_LOAD_STOP else 0
+        if hits >= 2:
+            reason = f"load {load}"
+            break
+        if lag >= AUTO_LAG_STOP and abs(goal - open_pos) > 200:
+            reason = f"stall (lag {lag})"
+            break
+    pos = d.read_position(sid) or goal
+    travel = abs(pos - open_pos)
+    tight = int(open_pos + sign * max(0, travel * (1 - AUTO_BACKOFF)))
+    say(f"  {s.name}: stopped after {travel} ticks ({reason}); limit set at {abs(tight - open_pos)} "
+        f"(was {abs(s.span)})  load trace: {[ld for _, ld, _ in log[::max(1, len(log) // 8)]]}")
+    d.write_position(sid, open_pos)
+    time.sleep(0.2 + travel / 400)
+    d.set_torque(sid, False)
+    d.set_goal_torque(sid, defaults.goal_torque)
+    d.set_torque_limit(sid, defaults.torque_limit)
+    if travel < 150:
+        say(f"  {s.name}: barely moved before resisting; left unchanged (check the tendon)")
+        return None
+    return {"slack": int(open_pos), "tight": tight, "inverted": bool(tight < open_pos),
+            "stall_load": defaults.stall_load_floor}
+
+
 def _step_to_tight(d: FeetechDriver, sid: int, slack: int, cfg: HandConfig, ui: Prompter, step_delay: float,
                    direction: int, goal: int, history: list[int]) -> dict | None:
     defaults = cfg.defaults
@@ -236,6 +299,9 @@ def tight_only(args: argparse.Namespace, cfg: HandConfig, raw: dict, out: Path, 
     hand.connect()
     assert hand.driver is not None
     chosen = [s for s in cfg.servos if s.enabled and (not args.only or s.name in args.only.split(","))]
+    if getattr(args, "tight_auto", False):
+        print("AUTO curl limits: each tendon winds from open at calibration torque and stops on resistance.\n"
+              "Stand by with `dexkit-estop` in another window or the PSU switch.")
     if not chosen:
         print(f"no driven tendon matches --only {args.only}")
         sys.exit(2)
@@ -252,8 +318,11 @@ def tight_only(args: argparse.Namespace, cfg: HandConfig, raw: dict, out: Path, 
             i = cfg.servos.index(s)
             open_pos = int(hand._slack[i])
             direction = 1 if s.span >= 0 else -1
-            result = capture_tight_from_open(hand.driver, s.id, s.name, cfg, ui, open_pos,
-                                             step_delay=step_delay, direction=direction)
+            if getattr(args, "tight_auto", False):
+                result = auto_tight_from_open(hand.driver, s, cfg, open_pos, ui.say)
+            else:
+                result = capture_tight_from_open(hand.driver, s.id, s.name, cfg, ui, open_pos,
+                                                 step_delay=step_delay, direction=direction)
             if result:
                 old = abs(s.span)
                 by_id[s.id].update(result, calibrated=True)
@@ -322,7 +391,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--tight-only", action="store_true",
                    help="re-set only each driven tendon's curl limit, starting from its trusted open "
                         "position (set by dexkit-relax --unwind); no 'relax the finger' step")
-    p.add_argument("--only", help="with --tight-only: comma-separated tendon names (default: all driven)")
+    p.add_argument("--tight-auto", action="store_true",
+                   help="like --tight-only but automatic: stops where the load rises or the servo stalls "
+                        "(calibration torque), backs off 8%%, records the limit. Stand by with dexkit-estop")
+    p.add_argument("--only", help="with --tight-only/--tight-auto: comma-separated tendon names (default: all driven)")
     p.add_argument("--trust-current", action="store_true",
                    help="with --tight-only: take the current positions as open even if not restored")
     p.add_argument("--label-only", action="store_true",
@@ -383,7 +455,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.step_ticks is None and args.tight_only:
         cfg.defaults.calib_step_ticks = 20  # slower: we are looking for the limit, not taking up slack
 
-    if args.tight_only:
+    if args.tight_only or args.tight_auto:
         tight_only(args, cfg, raw, out, ui, step_delay)
         return
 
