@@ -121,9 +121,14 @@ def open_session(
                          + (f"; disabled (torque off): {', '.join(off)}" if off else ""))
             cal = s.hand_cfg.calibrated_at or "NOT CALIBRATED (placeholder values)"
             lines.append(f"[{'ok' if s.hand_cfg.is_calibrated else '!!'}] calibration {s.hand_cfg.source}: {cal}")
-            if not mock:
-                lines.append("[!!] the fingers' CURRENT positions are now 'open' (servos lose their turn count at "
-                             "power-off). If any finger is not relaxed/open, type 'home' in dexkit-pose")
+            rep = getattr(s.hand, "restore_report", None)
+            if rep is not None:
+                if rep["assumed"]:
+                    lines.append(f"[!!] open position unknown for {rep['assumed']}: using where they are NOW. "
+                                 "If any of them is not relaxed/open, type 'home' in dexkit-pose")
+                else:
+                    lines.append(f"[ok] open positions restored from the last session "
+                                 f"(max drift {rep['max_drift']} ticks)")
         if use_gantry:
             s.gantry_cfg = load_gantry_config()
             if mock:

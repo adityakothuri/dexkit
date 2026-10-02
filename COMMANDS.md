@@ -4,7 +4,7 @@ Every session starts with:
 ```bash
 cd ~/dexkit && source .venv/bin/activate
 ```
-Run commands from a normal Terminal window (they ask you to type `go` before anything moves). Fingers relaxed and wrist neutral before `go`.
+Run commands from a normal Terminal window (they ask you to type `go` before anything moves). The software remembers where "open" is between sessions; if the checklist says `open position unknown`, do `dexkit-pose` → `home` once.
 
 ## Emergency stop
 

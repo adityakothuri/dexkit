@@ -153,6 +153,16 @@ wrist (ch 12) remains. Every tendon winds toward higher counts (`inverted: false
   thread during any motion in dexkit-pose and dexkit-run; it calls `EStop.request`, and the
   control loop's next `check()` does the hardware stop. The command exits; restart to continue.
 
+## Open-position memory (2026-10-02, late)
+
+`dexkit-relax` did nothing on the bench because connect() took the curled fingers' current
+positions as open. Now `data/state/hand_positions.json` stores each servo's last reading and
+absolute slack (saved on connect, close, home, and by calibration). `restore_or_rebase()`
+recovers slack on the next connect: k = round((last - now)/4096) undoes a power-cycle shift;
+if the residual drift exceeds RESTORE_DRIFT_TICKS (1024) the finger falls back to
+current = open and is listed on the checklist (`home` fixes it). The old behaviour is the
+fallback only.
+
 ## Hardware notes
 
 - The hand can be calibrated and driven **off the gantry**; hand and gantry configs are

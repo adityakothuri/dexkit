@@ -15,12 +15,14 @@ angle nearest the current position.
 from __future__ import annotations
 
 import dataclasses
+import json
 import logging
 import time
+from pathlib import Path
 
 import numpy as np
 
-from dexkit.config import TICKS_PER_REV, HandConfig, RollConfig
+from dexkit.config import TICKS_PER_REV, HandConfig, RollConfig, data_dir
 from dexkit.hw.base import N_FINGERS, HandInterface, HandState
 from dexkit.hw.feetech_protocol import (
     BROADCAST_ID,
@@ -38,6 +40,38 @@ log = logging.getLogger(__name__)
 
 # One block read covers present position(2) speed(2) load(2) voltage(1) temperature(1).
 STATE_BLOCK_LEN = 8
+
+# A finger may move this much (ticks) between sessions and still be recognised after a
+# power cycle shifts the count by a multiple of 4096. Beyond it, we cannot tell turns apart.
+RESTORE_DRIFT_TICKS = 1024
+
+
+def positions_state_path() -> Path:
+    return data_dir() / "state" / "hand_positions.json"
+
+
+def load_positions_state() -> dict:
+    p = positions_state_path()
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def save_positions_state(entries: dict[int, dict[str, int]], roll_center: int | None = None) -> None:
+    """Merge {servo id: {"pos": last reading, "slack": absolute open position}} into the state file."""
+    state = load_positions_state()
+    servos = state.setdefault("servos", {})
+    for sid, e in entries.items():
+        servos[str(sid)] = {"pos": int(e["pos"]), "slack": int(e["slack"])}
+    if roll_center is not None:
+        state["roll_center"] = int(roll_center)
+    state["saved_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    p = positions_state_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(state, indent=1))
 
 
 def open_serial(port: str, baud: int, timeout_s: float) -> Transport:
@@ -182,6 +216,7 @@ class FeetechHand(HandInterface):
         self._payout = max(0.0, cfg.defaults.antagonist_payout)
         self._payout_cap = max(0, cfg.defaults.antagonist_payout_max_ticks)
         self.roll = cfg.roll  # replaced by a re-based copy on connect
+        self.restore_report: dict = {"restored": [], "assumed": [], "max_drift": 0}
         self._span = np.array([s.span for s in cfg.servos], dtype=float)
         self._set_slack(np.array([s.slack for s in cfg.servos], dtype=float), cfg.roll)
         self._last_ticks: np.ndarray | None = None
@@ -218,14 +253,60 @@ class FeetechHand(HandInterface):
             max_delta=[s.max_delta_ticks for s in self.cfg.servos] + [roll.max_delta_ticks],
         )
 
+    def _roll_center_for(self, present_roll: int) -> int:
+        """The calibrated roll center on whichever turn is nearest the present reading."""
+        p, c = present_roll, self.cfg.roll.center
+        return int(p + ((c - p + TICKS_PER_REV // 2) % TICKS_PER_REV) - TICKS_PER_REV // 2)
+
     def rebase(self, present: dict[int, int]) -> None:
-        """Current finger positions become 'open'; roll center snaps to its nearest equivalent turn."""
+        """Current finger positions become 'open' (the operator has opened the hand by hand)."""
         slack = np.array([present[s.id] for s in self.cfg.servos], dtype=float)
-        p = present[self.cfg.roll.id]
-        c = self.cfg.roll.center
-        center = p + ((c - p + TICKS_PER_REV // 2) % TICKS_PER_REV) - TICKS_PER_REV // 2
-        self._set_slack(slack, dataclasses.replace(self.cfg.roll, center=int(center)))
-        log.info("hand re-based: open = %s, roll center = %d", slack.astype(int).tolist(), center)
+        self._set_slack(slack, dataclasses.replace(self.cfg.roll, center=self._roll_center_for(present[self.cfg.roll.id])))
+        self.restore_report = {"restored": [], "assumed": [s.name for s in self.cfg.servos], "max_drift": 0}
+        log.info("hand re-based: open = %s, roll center = %d", slack.astype(int).tolist(), self.roll.center)
+        self._save_positions(present)
+
+    def restore_or_rebase(self, present: dict[int, int]) -> None:
+        """Recover each finger's absolute open position from the last session.
+
+        The multi-turn count survives between commands and is only lost at power-off, where it
+        collapses to the same angle on turn 0, i.e. shifts by a multiple of 4096. From the last
+        saved reading we undo that shift. A finger that was moved more than RESTORE_DRIFT_TICKS
+        by hand while powered off cannot be told apart from another turn: it falls back to
+        'current position = open' and is reported.
+        """
+        saved = load_positions_state().get("servos", {})
+        slack = np.zeros(len(self.cfg.servos))
+        restored, assumed, drifts = [], [], []
+        for i, s in enumerate(self.cfg.servos):
+            now = present[s.id]
+            e = saved.get(str(s.id))
+            if e is None:
+                slack[i] = now
+                assumed.append(s.name)
+                continue
+            k = round((e["pos"] - now) / TICKS_PER_REV)
+            drift = abs(e["pos"] - k * TICKS_PER_REV - now)
+            if drift <= RESTORE_DRIFT_TICKS:
+                slack[i] = e["slack"] - k * TICKS_PER_REV
+                restored.append(s.name)
+                drifts.append(drift)
+            else:
+                slack[i] = now
+                assumed.append(s.name)
+        self._set_slack(slack, dataclasses.replace(self.cfg.roll, center=self._roll_center_for(present[self.cfg.roll.id])))
+        self.restore_report = {"restored": restored, "assumed": assumed, "max_drift": int(max(drifts, default=0))}
+        log.info("open positions: restored %d, assumed-current %s (max drift %d ticks)",
+                 len(restored), assumed or "none", self.restore_report["max_drift"])
+        self._save_positions(present)
+
+    def _save_positions(self, present: dict[int, int]) -> None:
+        try:
+            save_positions_state({s.id: {"pos": present[s.id], "slack": int(self._slack[i])}
+                                  for i, s in enumerate(self.cfg.servos) if s.id in present},
+                                 roll_center=self.roll.center)
+        except OSError as e:
+            log.warning("could not save hand positions: %s", e)
 
     def rehome(self) -> None:
         """After the operator has pulled the fingers open with torque off: re-base and hold here."""
@@ -307,7 +388,7 @@ class FeetechHand(HandInterface):
         present = d.read_positions(self.ids)
         if len(present) != len(self.ids):
             raise SafetyTrip(f"could not read positions from {sorted(set(self.ids) - set(present))}")
-        self.rebase(present)
+        self.restore_or_rebase(present)
         ticks = np.array([present[sid] for sid in self.ids], dtype=np.int64)
         # Hold the current position so enabling torque never jumps to a stale goal.
         d.sync_write_positions(self._active(ticks))
@@ -437,6 +518,11 @@ class FeetechHand(HandInterface):
             log.error("relax failed: %s", e)
 
     def close(self) -> None:
+        if self.driver is not None and self.connected:
+            try:
+                self._save_positions(self.driver.read_positions(self.ids))
+            except Exception as e:  # noqa: BLE001 - closing must never fail
+                log.debug("save positions on close: %s", e)
         self.relax()
         if self.driver is not None:
             try:

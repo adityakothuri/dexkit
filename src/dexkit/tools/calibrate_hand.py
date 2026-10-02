@@ -356,6 +356,12 @@ def main(argv: list[str] | None = None) -> None:
             transport.close()
 
     raw["calibrated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    # Each captured servo was left at its slack with torque off: remember that absolute position.
+    from dexkit.hw.feetech_hand import save_positions_state
+
+    save_positions_state({sid: {"pos": by_id[sid]["slack"], "slack": by_id[sid]["slack"]}
+                          for sid in captured if sid != cfg.roll.id},
+                         roll_center=raw["roll"]["center"] if cfg.roll.id in captured else None)
     hand_config_from_dict(raw)  # validate before writing
     if out.exists() and args.servo is not None:
         shutil.copy(out, out.with_suffix(".yaml.bak"))

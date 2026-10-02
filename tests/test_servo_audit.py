@@ -159,3 +159,67 @@ def test_disabled_servos_are_never_commanded_or_energised(hand_cfg):
     assert all(st.fingers[i] == 0.0 for i, s in enumerate(cfg.servos) if not s.enabled)
     assert all(st.fingers[i] > 0.9 for i, s in enumerate(cfg.servos) if s.enabled)
     h.close()
+
+
+def _session(cfg, start):
+    """One connect/close cycle on mock servos starting at `start`; returns the hand (closed)."""
+    from dexkit.hw.mock import MockFeetechSerial, MockHand, mock_servos_for
+
+    h = MockHand(cfg, latency_s=0, bus=MockFeetechSerial(mock_servos_for(cfg, start_ticks=start)))
+    h.connect()
+    return h
+
+
+def test_open_position_survives_a_fist_and_a_power_cycle(hand_cfg):
+    """Session 1 calibrates (slack known), session 2 ends with fingers curled, session 3 starts after a
+    PSU cycle: 'open' must still be the real open, not wherever the curled fingers are."""
+    import time
+
+    from dexkit.hw.feetech_hand import save_positions_state
+
+    cfg = hand_cfg
+    s0 = cfg.servos[0]
+    save_positions_state({s.id: {"pos": s.slack, "slack": s.slack} for s in cfg.servos}, roll_center=cfg.roll.center)
+    # session 2: make a fist, leave it curled, close
+    h = _session(cfg, None)
+    only = np.zeros(12)
+    only[0] = 1.0
+    for _ in range(20):
+        h.set_targets(only, 0.0)
+    time.sleep(0.2)
+    h.close()  # saves pos ~= tight (2700), slack 2048
+    # power cycle: the count collapses to turn 0 -> same angle, but let's put it on another turn
+    curled = s0.tight + 2 * 4096  # the servo "woke up" reading this
+    h = _session(cfg, {s0.id: curled})
+    assert s0.name in h.restore_report["restored"]
+    assert h._slack[0] == s0.slack + 2 * 4096  # open recovered on the right turn
+    for _ in range(20):
+        h.set_targets(np.zeros(12), 0.0)
+    assert h.bus_sim.servos[s0.id].goal == s0.slack + 2 * 4096  # 'relax' really goes back to open
+    h.close()
+
+
+def test_open_position_falls_back_when_moved_by_hand_too_far(hand_cfg):
+    from dexkit.hw.feetech_hand import save_positions_state
+
+    cfg = hand_cfg
+    s0 = cfg.servos[0]
+    save_positions_state({s.id: {"pos": s.slack, "slack": s.slack} for s in cfg.servos}, roll_center=cfg.roll.center)
+    h = _session(cfg, {s0.id: s0.slack + 2000})  # moved by hand ~half a turn while off: ambiguous
+    assert s0.name in h.restore_report["assumed"] and h._slack[0] == s0.slack + 2000
+    assert all(n in h.restore_report["restored"] for n in cfg.names[1:])
+    h.close()
+
+
+def test_rehome_overrides_restored_open(hand_cfg):
+    from dexkit.hw.feetech_hand import load_positions_state, save_positions_state
+
+    cfg = hand_cfg
+    save_positions_state({s.id: {"pos": s.slack, "slack": s.slack} for s in cfg.servos}, roll_center=cfg.roll.center)
+    h = _session(cfg, {cfg.servos[0].id: cfg.servos[0].slack + 300})  # within drift: restored to slack
+    assert h._slack[0] == cfg.servos[0].slack
+    h.relax()
+    h.rehome()  # operator says: where it is now IS open
+    assert h._slack[0] == cfg.servos[0].slack + 300
+    assert load_positions_state()["servos"][str(cfg.servos[0].id)]["slack"] == cfg.servos[0].slack + 300
+    h.close()

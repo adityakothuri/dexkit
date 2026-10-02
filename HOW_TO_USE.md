@@ -198,7 +198,7 @@ After this, the gantry refuses to go outside that box. If you skip this step, a 
 
 ## Part B: every session
 
-**Rule for every session: before you type `go`, every finger must be relaxed/open and the wrist in its neutral position.** The motors forget how many turns they've made whenever the power is off, so the software takes "wherever the fingers are right now" as *open* each time it connects. If you connect with a finger half-curled, that finger will never fully open and could over-tighten. Already connected and not sure? Type `home` at the `pose>` prompt: it switches the motors off, lets you pull the fingers open by hand, and re-bases when you press Enter.
+**The software remembers where "open" is.** At the end of every command it saves each motor's position, and on the next connect it recovers the true open position from that, even across a power cycle (the motors forget their turn count when the power is off, but the saved reading lets the software undo that). The startup checklist tells you: `[ok] open positions restored` means all good; `[!!] open position unknown for [...]` means those fingers were moved by hand while the power was off (more than about a quarter turn), and the software is treating where they are *now* as open. In that case, once: `dexkit-pose` → `home` → pull every finger open and the wrist to neutral by hand → Enter. That teaches it again and it's remembered from then on.
 
 ```bash
 cd ~/dexkit
