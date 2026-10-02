@@ -12,9 +12,10 @@ from pathlib import Path
 from typing import Any
 
 from dexkit.config import load_yaml
+from dexkit.control.estop_key import SpaceWatch
 from dexkit.control.poses import Pose, PoseLibrary, go_to_pose
 from dexkit.hw.base import GantryInterface, HandInterface
-from dexkit.hw.safety import ESTOP, EStop, TravelBox
+from dexkit.hw.safety import ESTOP, EStop, EStopTripped, TravelBox
 
 log = logging.getLogger(__name__)
 
@@ -198,12 +199,18 @@ def main(argv: list[str] | None = None) -> None:
             seq = validate(data, poses, box, start_xyz=start, roll_range=hand_cfg.roll.range_deg, **kw)
         t0 = time.monotonic()
         runs = 0
-        while args.loop == 0 or runs < args.loop:
-            s.estop.check()
-            execute(seq, s.hand, s.gantry, poses, rate_hz=hand_cfg.rate_hz, estop=s.estop)
-            runs += 1
-            if args.loop != 1:
-                log.info("sequence '%s': run %d done", seq.name, runs)
+        print("SPACE = emergency stop")
+        try:
+            with SpaceWatch(s.estop):
+                while args.loop == 0 or runs < args.loop:
+                    s.estop.check()
+                    execute(seq, s.hand, s.gantry, poses, rate_hz=hand_cfg.rate_hz, estop=s.estop)
+                    runs += 1
+                    if args.loop != 1:
+                        log.info("sequence '%s': run %d done", seq.name, runs)
+        except EStopTripped as e:
+            print(f"\nEMERGENCY STOP: {e}. Hand relaxed, gantry held. Restart to continue.")
+            raise SystemExit(3) from None
         print(f"sequence '{seq.name}' done ({runs} run{'s' if runs != 1 else ''}) in {time.monotonic() - t0:.1f}s")
 
 

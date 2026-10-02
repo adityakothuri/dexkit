@@ -218,6 +218,7 @@ class EStop:
         self._hands: list[HandInterface] = []
         self._gantries: list[GantryInterface] = []
         self.log: list[str] = []
+        self._requested: str | None = None
 
     def register(self, hand: HandInterface | None = None, gantry: GantryInterface | None = None) -> None:
         if hand is not None and hand not in self._hands:
@@ -246,7 +247,17 @@ class EStop:
             for h in self._hands:
                 self._try("hand.relax", h.relax)
 
+    def request(self, reason: str) -> None:
+        """Ask for a trip from another thread (e.g. a key watcher). The control thread performs
+        the hardware stop on its next `check()`, so bus traffic never interleaves."""
+        with self._lock:
+            if self._requested is None:
+                self._requested = reason
+                log.critical("EMERGENCY STOP requested: %s", reason)
+
     def check(self) -> None:
+        if not self.tripped and self._requested is not None:
+            self.trip(self._requested)
         if not self.tripped and estop_flag_path().exists():
             self.trip("external e-stop (dexkit-estop); clear with dexkit-estop --clear")
         if self.tripped:
@@ -257,6 +268,7 @@ class EStop:
         with self._lock:
             self.tripped = False
             self.reason = None
+            self._requested = None
 
 
 ESTOP = EStop()

@@ -27,6 +27,7 @@ def hand_cfg():
     for i, (s, name) in enumerate(zip(cfg.servos, TENDONS, strict=True)):
         s.id, s.slack, s.tight, s.inverted, s.stall_load = i + 1, 2048, 2700, False, 800
         s.name, (s.finger, s.role) = name, TENDONS[name]
+        s.enabled = True  # tests exercise all 12 tendons regardless of what the bench file disables
     cfg.roll.id, cfg.roll.center, cfg.roll.inverted = 13, 2048, False
     cfg.calibrated_at = None
     for s in cfg.servos:

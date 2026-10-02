@@ -7,8 +7,11 @@
 
 poses:
   relax:     {fingers: {default: 0.0}, roll: 0}
-  open:      {fingers: {default: 0.0, extend: 0.5}, roll: 0}
-  open_wide: {fingers: {default: 0.0, extend: 0.7}, roll: 0}
+  # One servo = one movement: winding (1.0) contracts, unwinding (0.0) releases and the foam
+  # springs the finger back. The *_extend servos are disabled in hand.yaml (enabled: false), so
+  # `extend` values are ignored; open == everything released.
+  open:      {fingers: {default: 0.0}, roll: 0}
+  open_wide: {fingers: {default: 0.0, extend: 0.7}, roll: 0}  # only differs if extensors are re-enabled
   fist:      {fingers: {default: 0.0, flex: 1.0}, roll: 0}
   point:     {fingers: {default: 0.0, flex: 1.0, index_flex: 0.0, index_extend: 0.5}, roll: 0}
   thumbs_up: {fingers: {default: 0.0, flex: 1.0, thumb_flex: 0.0, thumb_extend: 0.5}, roll: 0}

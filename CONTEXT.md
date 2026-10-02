@@ -140,6 +140,19 @@ wrist (ch 12) remains. Every tendon winds toward higher counts (`inverted: false
   operator reported fast motion straining the hand; `--speed-scale S` scales all three per run.
   Note `pinky_flex` has a 2-turn span (8149 ticks): a full curl takes ~10 s at 800.
 
+## Control model as of now (2026-10-02, evening)
+
+- **Extensors disabled.** `enabled: false` on the five `*_extend` servos in hand.yaml: torque
+  off, never written, read as 0. The bench showed the position-held extensors braking the
+  flexors (fist would not close, open barely opened); antagonist pay-out did not fix it on the
+  hand, so one servo = one movement: wind to contract, unwind to release (foam returns).
+  The pay-out code stays (inactive while there are no enabled pairs).
+- **Stall guard effectively off:** `stall_load_floor` 650 > goal_torque 600; the torque cap
+  protects the tendons. Lower the floor to re-enable load back-off.
+- **SPACE = e-stop everywhere.** `control/estop_key.py:SpaceWatch` watches the keyboard in a
+  thread during any motion in dexkit-pose and dexkit-run; it calls `EStop.request`, and the
+  control loop's next `check()` does the hardware stop. The command exits; restart to continue.
+
 ## Hardware notes
 
 - The hand can be calibrated and driven **off the gantry**; hand and gantry configs are

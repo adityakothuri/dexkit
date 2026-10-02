@@ -318,6 +318,10 @@ The gantry must be zeroed first (Way 1 or Way 2), or answer `y` to "Restore save
 
 ---
 
+## How a finger moves
+
+One servo = one movement. Winding its tendon (value 1.0) contracts the finger; unwinding (0.0) releases it and the foam springs it back. There is no separate "extend" motor in use: the five `*_extend` servos are switched off in `config/hand.yaml` (`enabled: false`), stay torque-free, and are never commanded. To bring one back, set its `enabled: true`.
+
 ## The pose library
 
 Poses live in `config/poses/`, one file per group, and every file in that folder is loaded:
@@ -345,8 +349,8 @@ Poses live in `config/poses/`, one file per group, and every file in that folder
 
 | Situation | Do this |
 |---|---|
-| Inside `dexkit-teleop` | press **SPACE** |
-| Anywhere else | press **Ctrl+C**. The hand goes limp and the gantry stops. |
+| While anything is moving (`dexkit-pose`, `dexkit-run`, `dexkit-teleop`) | press **SPACE**. Motion stops at once, the hand goes limp, the gantry holds, and the command exits. Nothing overrides it; restart the command to continue. |
+| At a prompt, or if SPACE didn't take | press **Ctrl+C**. Same effect. |
 | Need it from a second Terminal window | `dexkit-estop` |
 | Absolute last resort | turn the PSU off and unplug the gantry's power |
 

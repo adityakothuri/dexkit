@@ -11,14 +11,14 @@ voltage_window: [6.0, 8.4]
 voltage_check_period_s: 2.0
 max_temp_c: 65
 rate_hz: 20
-calibrated_at: '2026-10-02T08:21:13'
+calibrated_at: '2026-10-02T08:52:39'
 servo_family: hls
 registers: {}
 servos:
 - {id: 0, name: pinky_flex, finger: pinky, role: flex, slack: 3944, tight: 12093, inverted: false, max_delta_ticks: 80, stall_load: 400,
   calibrated: true}
 - {id: 1, name: thumb_extend, finger: thumb, slack: 3869, tight: 1711, inverted: true, max_delta_ticks: 80, stall_load: 400,
-  calibrated: true, role: extend}
+  calibrated: true, role: extend, enabled: false}
 - {id: 2, name: ring_flex, finger: ring, slack: 369, tight: 3553, inverted: false, max_delta_ticks: 80, stall_load: 400, calibrated: true,
   role: flex}
 - {id: 3, name: index_adduct, finger: index, slack: 11518, tight: 12190, inverted: false, max_delta_ticks: 80, stall_load: 400,
@@ -26,19 +26,20 @@ servos:
 - {id: 4, name: index_flex, finger: index, slack: 3937, tight: 7280, inverted: false, max_delta_ticks: 80, stall_load: 400,
   calibrated: true, role: flex}
 - {id: 5, name: middle_extend, finger: middle, slack: 3678, tight: 4471, inverted: false, max_delta_ticks: 80, stall_load: 400,
-  calibrated: true, role: extend}
+  calibrated: true, role: extend, enabled: false}
 - {id: 6, name: middle_flex, finger: middle, slack: 2251, tight: 6467, inverted: false, max_delta_ticks: 80, stall_load: 400,
   calibrated: true, role: flex}
 - {id: 7, name: index_extend, finger: index, slack: 1696, tight: 2889, inverted: false, max_delta_ticks: 80, stall_load: 400,
-  calibrated: true, role: extend}
+  calibrated: true, role: extend, enabled: false}
 - {id: 8, name: thumb_flex, finger: thumb, slack: -558, tight: -3062, inverted: true, max_delta_ticks: 80, stall_load: 400,
   calibrated: true, role: flex}
 - {id: 9, name: ring_extend, finger: ring, slack: 681, tight: 2552, inverted: false, max_delta_ticks: 80, stall_load: 400,
-  calibrated: true, role: extend}
-- {id: 10, name: thumb_adduct, finger: thumb, slack: 3858, tight: 2580, inverted: true, max_delta_ticks: 80, stall_load: 400,
+  calibrated: true, role: extend, enabled: false}
+- {id: 10, name: thumb_adduct, finger: thumb, slack: 3500, tight: 5403, inverted: false, max_delta_ticks: 80, stall_load: 400,
   calibrated: true, role: adduct}
 - {id: 11, name: pinky_extend, finger: pinky, slack: 2780, tight: 4052, inverted: false, max_delta_ticks: 80, stall_load: 400,
-  calibrated: true, role: extend}
+  calibrated: true, role: extend, enabled: false}
 roll: {id: 12, model: HLS3640M, center: 1465, range_deg: 90, inverted: false, max_delta_ticks: 80, calibrated: true}
 defaults: {accel: 20, speed: 800, torque_limit: 600, goal_torque: 600, calib_torque_limit: 300, calib_step_ticks: 40, calib_max_travel_ticks: 12288,
-  calib_direction: 1, stall_load_factor: 1.5, stall_load_floor: 400, stall_time_s: 0.5, stall_backoff: 0.05}
+  calib_direction: 1, stall_load_factor: 1.5, stall_load_floor: 650, stall_time_s: 0.5, stall_backoff: 0.05, antagonist_payout: 1.0,
+  antagonist_payout_max_ticks: 1000}

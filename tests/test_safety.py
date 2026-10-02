@@ -134,3 +134,54 @@ def test_estop_on_real_mock_drivers(mock_hand, mock_gantry):
     assert rt == [b"!", b"\x85", b"\x18"]
     assert not any(s.torque_on for s in mock_hand.bus_sim.servos.values())
     assert not mock_gantry.frame_valid
+
+
+def test_estop_request_from_another_thread_stops_on_next_check(mock_hand, mock_gantry):
+    """SPACE from the key watcher thread: the control loop performs the hardware stop on its next check."""
+    import threading
+
+    from dexkit.hw.safety import EStop, EStopTripped
+
+    e = EStop()
+    e.register(hand=mock_hand, gantry=mock_gantry)
+    threading.Thread(target=e.request, args=("operator pressed SPACE",)).start()
+    for _ in range(100):  # wait for the thread
+        if e._requested:
+            break
+    assert not e.tripped and mock_hand.torque_on  # nothing touched the hardware yet
+    with pytest.raises(EStopTripped, match="SPACE"):
+        e.check()
+    assert e.tripped and not mock_hand.torque_on and "gantry.feed_hold" in e.log
+    with pytest.raises(EStopTripped):
+        e.check()  # and it stays tripped
+
+
+def test_space_watch_requests_estop_and_go_to_pose_stops(mock_hand, hand_cfg):
+    import numpy as np
+
+    from dexkit.control.estop_key import SpaceWatch
+    from dexkit.control.poses import Pose, go_to_pose
+    from dexkit.hw.safety import EStop, EStopTripped
+    from dexkit.util import Rate
+
+    e = EStop()
+    e.register(hand=mock_hand)
+    presses = iter([None, None, b" "])
+
+    def fake_keys(_timeout: float) -> bytes | None:
+        return next(presses, None)
+
+    fist = np.array([1.0 if s.role == "flex" else 0.0 for s in hand_cfg.servos])
+    with pytest.raises(EStopTripped), SpaceWatch(e, reader=fake_keys):
+        go_to_pose(mock_hand, Pose(fist, 0.0), 2.0, 50, estop=e, rate=Rate(50))
+    assert not mock_hand.torque_on
+    f, _ = mock_hand.last_command
+    assert f.max() < 0.5  # stopped early, nowhere near the pose
+
+
+def test_space_watch_is_a_noop_without_a_terminal():
+    from dexkit.control.estop_key import SpaceWatch
+    from dexkit.hw.safety import EStop
+
+    with SpaceWatch(EStop(), enabled=False) as w:
+        assert w._thread is None

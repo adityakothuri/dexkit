@@ -130,3 +130,32 @@ def test_payout_is_capped_for_long_take_up_spans(hand_cfg):
         h.set_targets(only, 0.0)
     assert h.bus_sim.servos[cfg.servos[ei].id].goal == cfg.servos[ei].slack - 300
     h.close()
+
+
+def test_disabled_servos_are_never_commanded_or_energised(hand_cfg):
+    """Extensors switched off in hand.yaml: torque stays off, no goal is ever written, state reads 0."""
+    from dexkit.hw.feetech_protocol import INST_SYNC_WRITE
+
+    cfg = hand_cfg
+    off = [s for s in cfg.servos if s.role == "extend"]
+    for s in off:
+        s.enabled = False
+    assert cfg.antagonist_pairs() == []
+    h = _hand(cfg)
+    assert all(not h.bus_sim.servos[s.id].torque_on for s in off)
+    assert all(h.bus_sim.servos[s.id].torque_on for s in cfg.servos if s.enabled)
+    for _ in range(15):
+        f, _ = h.set_targets(np.ones(12), 0.0)  # ask for everything, including the disabled ones
+    assert all(f[i] == 0.0 for i, s in enumerate(cfg.servos) if not s.enabled)
+    goal_addr = cfg.register_map()["goal_position"]
+    for pkt in h.calls:
+        if len(pkt) > 6 and pkt[4] == INST_SYNC_WRITE and pkt[5] == goal_addr:
+            written = {pkt[7 + 3 * k] for k in range((len(pkt) - 8) // 3)}
+            assert not (written & {s.id for s in off}), "a disabled servo received a goal position"
+    import time
+
+    time.sleep(0.25)  # let the simulated servos arrive
+    st = h.get_state()
+    assert all(st.fingers[i] == 0.0 for i, s in enumerate(cfg.servos) if not s.enabled)
+    assert all(st.fingers[i] > 0.9 for i, s in enumerate(cfg.servos) if s.enabled)
+    h.close()

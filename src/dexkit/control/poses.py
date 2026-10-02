@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ from typing import Any
 import numpy as np
 
 from dexkit.config import FINGERS, ROLES, TENDONS, HandConfig, config_dir, dump_yaml, load_yaml
+from dexkit.control.estop_key import SpaceWatch
 from dexkit.hw.base import N_FINGERS, GantryInterface, HandInterface
 from dexkit.hw.safety import ESTOP, EStop, EStopTripped, SafetyTrip
 from dexkit.util import Rate
@@ -326,15 +328,19 @@ def interactive(hand: HandInterface, lib: PoseLibrary, rate_hz: float, duration:
                     raise ValueError(f"finger servo must be 1..{N_FINGERS}")
                 f, r = hand.last_command
                 f[n - 1] = float(parts[2])
-                go_to_pose(hand, Pose(f, r), duration, rate_hz, mode, estop=estop)
+                with SpaceWatch(estop):
+                    go_to_pose(hand, Pose(f, r), duration, rate_hz, mode, estop=estop)
             elif cmd == "roll" and len(parts) == 2:
                 f, _ = hand.last_command
-                go_to_pose(hand, Pose(f, float(parts[1])), duration, rate_hz, mode, estop=estop)
-            elif gantry is not None and gantry_command(gantry, parts, estop):
-                pass  # gantry commands win over a pose of the same name (e.g. `zero`); use `pose zero`
+                with SpaceWatch(estop):
+                    go_to_pose(hand, Pose(f, float(parts[1])), duration, rate_hz, mode, estop=estop)
+            elif gantry is not None and parts[0].lower() in ("where", "zero", "jog", "goto"):
+                with SpaceWatch(estop):  # gantry commands win over a pose of the same name; use `pose zero`
+                    gantry_command(gantry, parts, estop)
             elif cmd in lib or (cmd == "pose" and len(parts) == 2 and parts[1] in lib):
                 name = parts[1] if cmd == "pose" else cmd
-                go_to_pose(hand, lib[name], duration, rate_hz, mode, estop=estop)
+                with SpaceWatch(estop):
+                    go_to_pose(hand, lib[name], duration, rate_hz, mode, estop=estop)
                 f, r = hand.last_command
                 print(f"-> {name}: commanded {np.round(f, 2).tolist()} roll {r:+.1f}")
             else:
@@ -383,18 +389,33 @@ def main(argv: list[str] | None = None) -> None:
         p.error(f"unknown pose '{args.name}'. Known: {', '.join(lib.names())}")
     mode = "minjerk" if args.minjerk else "linear"
 
-    with open_session(args, need_hand=True, need_gantry=bool(args.gantry and not args.name)) as s:
-        assert s.hand is not None and s.hand_cfg is not None
-        if not args.name:
-            interactive(s.hand, lib, s.hand_cfg.rate_hz, args.duration, mode, s.estop, gantry=s.gantry)
-            return
-        t0 = time.monotonic()
-        go_to_pose(s.hand, lib[args.name], args.duration, s.hand_cfg.rate_hz, mode, estop=s.estop)
-        time.sleep(args.hold)
-        st = s.hand.get_state()
-        print(f"pose '{args.name}' reached in {time.monotonic() - t0:.2f}s; "
-              f"measured fingers {np.round(st.fingers, 2).tolist()} roll {st.roll_deg:+.1f}")
-        print("relaxing (torque off). Use `dexkit-pose` with no name to stay connected between poses.")
+    try:
+        with open_session(args, need_hand=True, need_gantry=bool(args.gantry and not args.name)) as s:
+            assert s.hand is not None and s.hand_cfg is not None
+            if not args.name:
+                interactive(s.hand, lib, s.hand_cfg.rate_hz, args.duration, mode, s.estop, gantry=s.gantry)
+                return
+            t0 = time.monotonic()
+            with SpaceWatch(s.estop):
+                go_to_pose(s.hand, lib[args.name], args.duration, s.hand_cfg.rate_hz, mode, estop=s.estop)
+                hold_until = time.monotonic() + args.hold
+                while time.monotonic() < hold_until:
+                    s.estop.check()
+                    time.sleep(0.05)
+            _finish_one_shot(s, args, t0)
+    except EStopTripped as e:
+        print(f"\nEMERGENCY STOP: {e}. Hand relaxed. Restart dexkit-pose to continue.")
+        sys.exit(3)
+
+
+def _finish_one_shot(s: object, args: object, t0: float) -> None:
+    from dexkit.cli import Session
+
+    assert isinstance(s, Session) and s.hand is not None
+    st = s.hand.get_state()
+    print(f"pose '{args.name}' reached in {time.monotonic() - t0:.2f}s; "  # type: ignore[attr-defined]
+          f"measured fingers {np.round(st.fingers, 2).tolist()} roll {st.roll_deg:+.1f}")
+    print("relaxing (torque off). Use `dexkit-pose` with no name to stay connected between poses.")
 
 
 if __name__ == "__main__":

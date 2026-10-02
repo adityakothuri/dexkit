@@ -111,6 +111,7 @@ class ServoConfig:
     max_delta_ticks: int = 120
     stall_load: int = 800
     calibrated: bool = False  # set by dexkit-calibrate-hand when slack/tight were measured
+    enabled: bool = True  # false: torque stays OFF and the servo is never commanded (free-wheels)
 
     def __post_init__(self) -> None:
         if self.name in TENDONS:
@@ -176,7 +177,8 @@ class HandDefaults:
     calib_direction: int = 1  # +1: step toward higher counts, -1: lower; --reverse flips it
     calib_direction: int = 1  # +1: step toward higher counts, -1: lower (the bench hand winds on -1)
     stall_load_factor: float = 1.5
-    stall_load_floor: int = 400  # never set a stall threshold below this (holding at goal_torque 600 is normal)
+    stall_load_floor: int = 650  # above goal_torque (600): the torque cap protects the tendons; the stall
+    # watch only trips if goal_torque is raised past it. Lower this to re-enable load back-off.
     stall_time_s: float = 0.5
     stall_backoff: float = 0.05
     antagonist_max_sum: float = 1.0  # flexor + extensor of one finger may never exceed this together
@@ -242,9 +244,18 @@ class HandConfig:
     def names(self) -> list[str]:
         return [s.name for s in self.servos]
 
+    @property
+    def active_ids(self) -> list[int]:
+        """Finger servos that are commanded (enabled), plus the roll servo."""
+        return [s.id for s in self.servos if s.enabled] + [self.roll.id]
+
+    @property
+    def disabled_names(self) -> list[str]:
+        return [s.name for s in self.servos if not s.enabled]
+
     def antagonist_pairs(self) -> list[tuple[int, int]]:
-        """(flexor index, extensor index) for every finger that has both assigned."""
-        by = {(s.finger, s.role): i for i, s in enumerate(self.servos) if s.finger and s.role}
+        """(flexor index, extensor index) for every finger that has both assigned and enabled."""
+        by = {(s.finger, s.role): i for i, s in enumerate(self.servos) if s.finger and s.role and s.enabled}
         return [(by[(f, "flex")], by[(f, "extend")]) for f in FINGERS if (f, "flex") in by and (f, "extend") in by]
 
     @property

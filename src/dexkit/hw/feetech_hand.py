@@ -172,6 +172,8 @@ class FeetechHand(HandInterface):
         self.port_name = cfg.port
         self.driver: FeetechDriver | None = None
         self.ids = cfg.ids
+        self.active_ids = cfg.active_ids  # commanded + torque on; the rest stay relaxed
+        self._enabled = np.array([s.enabled for s in cfg.servos])
         self.voltage_gate = VoltageGate(cfg.voltage_window)
         self.temp_watch = TempWatch(cfg.max_temp_c)
         self.load_watch = LoadWatch([s.stall_load for s in cfg.servos], cfg.defaults.stall_time_s)
@@ -234,8 +236,8 @@ class FeetechHand(HandInterface):
             raise SafetyTrip(f"could not read positions from {sorted(set(self.ids) - set(present))}")
         self.rebase(present)
         ticks = np.array([present[sid] for sid in self.ids], dtype=np.int64)
-        self.driver.sync_write_positions(dict(zip(self.ids, ticks.tolist(), strict=True)))
-        self.driver.set_torque_all(self.ids, True)
+        self.driver.sync_write_positions(self._active(ticks))
+        self.driver.set_torque_all(self.active_ids, True)
         self.torque_on = True
         self._last_ticks = ticks
         self._load_cap = np.ones(N_FINGERS)
@@ -255,10 +257,14 @@ class FeetechHand(HandInterface):
                 t[i] -= np.sign(self._span[i]) * release
         return t
 
+    def _active(self, ticks: np.ndarray) -> dict[int, int]:
+        """Goal positions for the commanded servos only (disabled ones are never written)."""
+        return {sid: int(t) for sid, t in zip(self.ids, ticks.tolist(), strict=True) if sid in self.active_ids}
+
     def expected_fingers(self, fingers: np.ndarray) -> np.ndarray:
         """Normalized position each finger servo will report once it reaches `fingers`
         (negative where a servo has paid out past slack)."""
-        return self.ticks_to_fingers(self.fingers_to_ticks(fingers))
+        return np.where(self._enabled, self.ticks_to_fingers(self.fingers_to_ticks(fingers)), 0.0)
 
     def ticks_to_fingers(self, ticks: np.ndarray) -> np.ndarray:
         span = np.where(self._span == 0, 1.0, self._span)
@@ -304,8 +310,12 @@ class FeetechHand(HandInterface):
         self.rebase(present)
         ticks = np.array([present[sid] for sid in self.ids], dtype=np.int64)
         # Hold the current position so enabling torque never jumps to a stale goal.
-        d.sync_write_positions(dict(zip(self.ids, ticks.tolist(), strict=True)))
-        d.set_torque_all(self.ids, True)
+        d.sync_write_positions(self._active(ticks))
+        d.set_torque_all(self.active_ids, True)
+        disabled = [sid for sid in self.ids if sid not in self.active_ids]
+        if disabled:
+            d.set_torque_all(disabled, False)
+            log.info("servos %s are disabled in hand.yaml: torque off, never commanded", disabled)
         self.torque_on = True
         self._last_ticks = ticks
         self._last_cmd = (np.clip(self.ticks_to_fingers(ticks[:N_FINGERS]), 0, 1),
@@ -328,6 +338,7 @@ class FeetechHand(HandInterface):
         f = np.clip(np.asarray(fingers, dtype=float), 0.0, 1.0)
         if f.shape != (N_FINGERS,):
             raise ValueError(f"fingers must have shape ({N_FINGERS},)")
+        f = np.where(self._enabled, f, 0.0)  # disabled servos: nothing is ever asked of them
         f = self.antagonists.apply(f)
         if self.antagonists.limited:
             log.debug("antagonist limit applied")
@@ -337,7 +348,7 @@ class FeetechHand(HandInterface):
         prev_ticks = self._last_ticks
         ticks = self.clamp.apply(target, prev_ticks)
         t0 = time.perf_counter()
-        self.driver.sync_write_positions(dict(zip(self.ids, ticks.tolist(), strict=True)))
+        self.driver.sync_write_positions(self._active(ticks))
         self.last_loop_ms = (time.perf_counter() - t0) * 1000
         self._last_ticks = ticks
         # What was actually commanded, in pull units: the requested pull, advanced only as far
@@ -390,6 +401,7 @@ class FeetechHand(HandInterface):
 
         if self.torque_on:
             loads = np.array([load.get(sid, 0) for sid in self.cfg.finger_ids], dtype=float)
+            loads[~self._enabled] = 0.0  # free-wheeling servos report drag, not a stall
             for i in self.load_watch.update(loads, now):
                 present_u = float(np.clip(self.ticks_to_fingers(finger_ticks[i : i + 1])[0], 0, 1))
                 self._load_cap[i] = max(0.0, min(self._load_cap[i], present_u) - self.cfg.defaults.stall_backoff)
@@ -397,7 +409,7 @@ class FeetechHand(HandInterface):
                             self.cfg.servos[i].name, loads[i], self._load_cap[i])
 
         state = HandState(
-            fingers=self.ticks_to_fingers(finger_ticks),
+            fingers=np.where(self._enabled, self.ticks_to_fingers(finger_ticks), 0.0),
             roll_deg=self.roll.ticks_to_deg(roll_ticks),
             ticks=ticks,
             load=load,

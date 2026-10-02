@@ -116,7 +116,9 @@ def open_session(
             vs = ", ".join(f"{k}:{v:.1f}" for k, v in sorted(volts.items()))
             lo, hi = s.hand_cfg.voltage_window
             lines.append(f"[ok] servo voltages (window {lo}-{hi} V): {vs}")
-            lines.append(f"[ok] {s.hand_cfg.side} hand, {len(s.hand_cfg.servos)} tendons + roll")
+            off = s.hand_cfg.disabled_names
+            lines.append(f"[ok] {s.hand_cfg.side} hand, {len(s.hand_cfg.servos) - len(off)} tendons driven + roll"
+                         + (f"; disabled (torque off): {', '.join(off)}" if off else ""))
             cal = s.hand_cfg.calibrated_at or "NOT CALIBRATED (placeholder values)"
             lines.append(f"[{'ok' if s.hand_cfg.is_calibrated else '!!'}] calibration {s.hand_cfg.source}: {cal}")
             if not mock:
