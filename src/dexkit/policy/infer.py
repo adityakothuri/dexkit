@@ -100,7 +100,16 @@ def main(argv: list[str] | None = None) -> None:
         box = (np.asarray(s.gantry_cfg.travel_min), np.asarray(s.gantry_cfg.travel_max)) if gantry and s.gantry_cfg else None
         feed = s.gantry_cfg.feed_max_mm_min if s.gantry_cfg else None
         env = DexKitEnv(s.hand, gantry, camera=camera, estop=s.estop, gantry_feed=feed)
-        n = run_policy(env, nets, pcfg, stats, device, args.steps, k, args.scheduler, box=box)
+        from dexkit.control.estop_key import SpaceWatch
+        from dexkit.hw.safety import EStopTripped
+
+        print("SPACE = emergency stop")
+        try:
+            with SpaceWatch(s.estop):
+                n = run_policy(env, nets, pcfg, stats, device, args.steps, k, args.scheduler, box=box)
+        except EStopTripped as e:
+            print(f"\nEMERGENCY STOP: {e}. Hand relaxed, gantry held. Restart to continue.")
+            raise SystemExit(3) from None
         print(f"policy executed {n} steps")
     camera.close()
 

@@ -226,3 +226,53 @@ def test_go_prompt_without_a_terminal_exits_cleanly(capsys):
     with pytest.raises(SystemExit):
         open_session(args, need_hand=True, prompt=no_tty)
     assert "normal terminal" in capsys.readouterr().out
+
+
+def test_relax_tool_releases_and_turns_torque_off(monkeypatch):
+    from dexkit.tools import relax
+
+    main_calls = {}
+
+    class FakeSession:
+        def __init__(self):
+            from dexkit.config import REPO_ROOT, load_hand_config
+            from dexkit.hw.mock import MockHand
+            from dexkit.hw.safety import EStop
+
+            self.hand_cfg = load_hand_config(REPO_ROOT / "config" / "hand.yaml")
+            self.hand = MockHand(self.hand_cfg, latency_s=0)
+            self.hand.connect()
+            self.estop = EStop()
+            main_calls["hand"] = self.hand
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            self.hand.close()
+
+    monkeypatch.setattr("dexkit.cli.open_session", lambda args, **kw: FakeSession())
+    relax.main(["--mock", "--yes", "--duration", "0.1"])
+    h = main_calls["hand"]
+    f, r = h.last_command
+    assert np.allclose(f, 0.0) and r == 0.0 and not h.torque_on
+
+
+def test_calibration_space_is_an_estop(hand_cfg):
+    from dexkit.hw.feetech_hand import FeetechDriver
+    from dexkit.hw.feetech_protocol import FeetechBus
+    from dexkit.hw.mock import MockFeetechSerial, mock_servos_for
+    from dexkit.hw.safety import EStopTripped
+    from dexkit.tools.calibrate_hand import ScriptedPrompter, capture_servo
+
+    class SpaceAfterThree(ScriptedPrompter):
+        def wait_enter(self, msg):
+            from collections import deque
+
+            self._keys = deque([None, None, None, " "])
+
+    t = MockFeetechSerial(mock_servos_for(hand_cfg))
+    d = FeetechDriver(FeetechBus(t, timeout_s=0.002), hand_cfg.register_map())
+    with pytest.raises(EStopTripped, match="SPACE"):
+        capture_servo(d, hand_cfg.servos[0].id, "x", hand_cfg, SpaceAfterThree(), step_delay=0.0)
+    assert not any(s.torque_on for s in t.servos.values())

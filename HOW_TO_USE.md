@@ -230,6 +230,7 @@ Type **`go`** at the checklist. You now get a `pose>` prompt and can type any of
 | `roll 30` | twist the wrist to +30° (use `roll -30` for the other way) |
 | `save myname` | save the hand's current shape as a new pose called `myname` |
 | `state` | show where the fingers actually are, plus voltage |
+| `normal` | release every tendon and center the wrist, stay connected |
 | `home` | motors off → you pull every finger open → Enter: that becomes *open* again |
 | `help` | show this list |
 | `q` | relax the hand and quit |
@@ -349,7 +350,7 @@ Poses live in `config/poses/`, one file per group, and every file in that folder
 
 | Situation | Do this |
 |---|---|
-| While anything is moving (`dexkit-pose`, `dexkit-run`, `dexkit-teleop`) | press **SPACE**. Motion stops at once, the hand goes limp, the gantry holds, and the command exits. Nothing overrides it; restart the command to continue. |
+| While anything is moving (every command, including both calibration tools) | press **SPACE**. Motion stops at once, the hand goes limp, the gantry holds, and the command exits. Nothing overrides it; restart the command to continue. |
 | At a prompt, or if SPACE didn't take | press **Ctrl+C**. Same effect. |
 | Need it from a second Terminal window | `dexkit-estop` |
 | Absolute last resort | turn the PSU off and unplug the gantry's power |
@@ -380,6 +381,8 @@ After `dexkit-estop`, nothing will move again until you run `dexkit-estop --clea
 
 ## Cheat sheet
 
+The full, organized list is in **[COMMANDS.md](COMMANDS.md)**.
+
 ```bash
 cd ~/dexkit && source .venv/bin/activate   # every time
 make ports                                  # are both USBs seen?
@@ -387,6 +390,7 @@ dexkit-scan                                 # are all 13 motors seen?
 dexkit-calibrate-hand                       # once (finger ranges)
 dexkit-calibrate-gantry                     # once (safe gantry area)
 dexkit-pose --gantry                        # type poses + gantry moves
+dexkit-relax                                # back to normal: release all, wrist 0, torque off
 dexkit-teleop                               # keyboard live control
 dexkit-run examples/pick_and_show.yaml      # run a routine
 dexkit-estop                                # emergency stop (2nd window)

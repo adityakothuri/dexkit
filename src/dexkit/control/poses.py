@@ -235,6 +235,7 @@ INTERACTIVE_HELP = """commands:
   list                 list poses
   state                print measured finger values, roll, voltage, load
   home                 torque off, you pull every finger fully open, Enter: that becomes 'open'
+  normal               release every tendon and center the wrist (stay connected)
   relax                torque off (hand goes limp) and quit
   quit / q             relax and quit"""
 
@@ -313,6 +314,10 @@ def interactive(hand: HandInterface, lib: PoseLibrary, rate_hz: float, duration:
                 st = hand.get_state()
                 print(f"fingers {np.round(st.fingers, 2).tolist()} roll {st.roll_deg:+.1f} "
                       f"V {st.min_voltage} load {st.load}")
+            elif cmd == "normal":
+                with SpaceWatch(estop):
+                    go_to_pose(hand, Pose(np.zeros(N_FINGERS), 0.0), max(duration, 1.5), rate_hz, mode, estop=estop)
+                print("-> normal: everything released, wrist at 0")
             elif cmd == "home":
                 hand.relax()
                 read("torque OFF. Pull every finger fully OPEN and the wrist to neutral, then press Enter ")

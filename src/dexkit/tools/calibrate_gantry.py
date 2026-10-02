@@ -1,6 +1,7 @@
 """Interactive gantry calibration: jog, set zero, measure the travel box.
 
 Keys: w a s d (Y+ X- Y- X+), q / e (Z up / down), Shift = 10 mm steps
+      SPACE  emergency stop (gantry held, nothing written, exits)
       z  set zero here (G92 X0 Y0 Z0)       m  mark this position as a box corner
       Enter or x  write gantry.yaml          Esc  quit without writing
 
@@ -88,6 +89,12 @@ def main(argv: list[str] | None = None) -> None:
             done = False
             for ev in evs:
                 k = ev.key
+                if k == "space":
+                    g.feed_hold()
+                    g.jog_cancel()
+                    print("EMERGENCY STOP: gantry held. Nothing written. Restart to continue.")
+                    keys.close()
+                    sys.exit(3)
                 if k == "esc":
                     done = True
                 elif k in ("x", "\n"):

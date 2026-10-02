@@ -151,7 +151,16 @@ def main(argv: list[str] | None = None) -> None:
         if use_gantry and s.gantry is not None and gantry is None:
             print("gantry frame not valid: replaying hand only")
         env = DexKitEnv(s.hand, gantry, estop=s.estop)
-        n = replay(env, rec, speed=args.speed, rate_hz=s.hand_cfg.rate_hz, use_gantry=gantry is not None)
+        from dexkit.control.estop_key import SpaceWatch
+        from dexkit.hw.safety import EStopTripped
+
+        print("SPACE = emergency stop")
+        try:
+            with SpaceWatch(s.estop):
+                n = replay(env, rec, speed=args.speed, rate_hz=s.hand_cfg.rate_hz, use_gantry=gantry is not None)
+        except EStopTripped as e:
+            print(f"\nEMERGENCY STOP: {e}. Hand relaxed, gantry held. Restart to continue.")
+            raise SystemExit(3) from None
         print(f"replayed {n} frames")
 
 

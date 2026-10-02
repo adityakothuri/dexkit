@@ -39,7 +39,7 @@ from dexkit.config import (
 )
 from dexkit.hw.feetech_hand import FeetechDriver, open_serial
 from dexkit.hw.feetech_protocol import FeetechBus
-from dexkit.hw.safety import SafetyTrip, VoltageGate
+from dexkit.hw.safety import EStopTripped, SafetyTrip, VoltageGate
 from dexkit.util import setup_logging
 
 HEADER = """# DexKit hand configuration (written by dexkit-calibrate-hand).
@@ -50,7 +50,8 @@ HEADER = """# DexKit hand configuration (written by dexkit-calibrate-hand).
 
 
 class Prompter:
-    """Interactive operator I/O."""
+    """Interactive operator I/O. While a servo is stepping, single keys work without Enter
+    (cbreak mode); SPACE is the emergency stop."""
 
     def say(self, msg: str) -> None:
         print(msg, flush=True)
@@ -58,13 +59,30 @@ class Prompter:
     def wait_enter(self, msg: str) -> None:
         input(msg + " [Enter] ")
 
+    def begin_keys(self) -> None:
+        import termios
+        import tty
+
+        self._fd = sys.stdin.fileno()
+        self._saved = termios.tcgetattr(self._fd)
+        tty.setcbreak(self._fd)
+
+    def end_keys(self) -> None:
+        import termios
+
+        saved = getattr(self, "_saved", None)
+        if saved is not None:
+            termios.tcsetattr(self._fd, termios.TCSADRAIN, saved)
+            self._saved = None
+
     def poll_key(self, timeout: float) -> str | None:
+        import os
         import select
 
         r, _, _ = select.select([sys.stdin], [], [], timeout)
         if r:
-            line = sys.stdin.readline().strip().lower()
-            return line[:1] or "\n"
+            ch = os.read(sys.stdin.fileno(), 1).decode("ascii", errors="replace")
+            return " " if ch == " " else (ch.lower() if ch not in ("\r", "\n") else "\n")
         return None
 
 
@@ -79,6 +97,12 @@ class ScriptedPrompter(Prompter):
     def wait_enter(self, msg: str) -> None:
         print(msg + " [scripted Enter]")
         self._keys = deque([None] * self.tight_steps + ["t"])
+
+    def begin_keys(self) -> None:
+        pass
+
+    def end_keys(self) -> None:
+        pass
 
     def poll_key(self, timeout: float) -> str | None:
         return self._keys.popleft() if self._keys else "t"
@@ -104,15 +128,28 @@ def capture_servo(
     d.write_position(sid, slack)
     d.set_torque(sid, True)
     ui.wait_enter("  Torque ON (low limit). Release the finger. Stepping will start; "
-                  "press t+Enter at the fully PULLED pose: curled in for a flexor, bent back for an extensor, "
-                  "over for an adduct (r reverse, u undo, f faster, s slower, x abort)")
+                  "press t at the fully PULLED pose: curled in for a flexor, bent back for an extensor, "
+                  "over for an adduct (r reverse, u undo, f faster, s slower, x abort, SPACE = e-stop)")
     ui.say(f"  stepping toward {'HIGHER' if direction > 0 else 'LOWER'} counts; watch the spool, "
-           "r+Enter if it unwinds the tendon")
-    step = defaults.calib_step_ticks
+           "press r if it unwinds the tendon")
     goal = slack
     history: list[int] = []
+    ui.begin_keys()
+    try:
+        return _step_to_tight(d, sid, slack, cfg, ui, step_delay, direction, goal, history)
+    finally:
+        ui.end_keys()
+
+
+def _step_to_tight(d: FeetechDriver, sid: int, slack: int, cfg: HandConfig, ui: Prompter, step_delay: float,
+                   direction: int, goal: int, history: list[int]) -> dict | None:
+    defaults = cfg.defaults
+    step = defaults.calib_step_ticks
     while True:
         key = ui.poll_key(step_delay)
+        if key == " ":
+            d.set_torque_all(cfg.ids, False)
+            raise EStopTripped("operator pressed SPACE during calibration (all torque off)")
         if key == "t":
             break
         if key == "x":
@@ -306,6 +343,9 @@ def main(argv: list[str] | None = None) -> None:
             if result:
                 by_id[sid].update(result, calibrated=True)
                 captured.append(sid)
+    except EStopTripped as e:
+        print(f"\nEMERGENCY STOP: {e}. Nothing written. Restart to continue.")
+        sys.exit(3)
     except SafetyTrip as e:
         print(f"SAFETY: {e}")
         sys.exit(1)
