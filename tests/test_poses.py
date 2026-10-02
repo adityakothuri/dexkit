@@ -30,17 +30,19 @@ def test_defaults_load_with_generated_curls(hand_cfg):
         for a, b in hand_cfg.antagonist_pairs():
             assert pose.fingers[a] + pose.fingers[b] <= 1.0 + 1e-9, f"{name}: {hand_cfg.names[a]}+{hand_cfg.names[b]}"
 
-    assert np.all(lib["relax"].fingers == 0)
-    roles = [s.role for s in hand_cfg.servos]
+    assert np.all(lib["relax"].fingers == 0) and np.all(lib["open"].fingers == 0)
     names = hand_cfg.names
+    fist = lib["fist"].fingers
+    for i, s in enumerate(hand_cfg.servos):
+        expect = 0.85 if s.role == "flex" else (0.4 if s.name == "thumb_adduct" else 0.0)
+        assert fist[i] == pytest.approx(expect), f"fist: {s.name}"
+    pinch = lib["pinch"].fingers
     for i in range(12):
-        assert lib["fist"].fingers[i] == (1.0 if roles[i] == "flex" else 0.0)
-        assert lib["open"].fingers[i] == 0.0  # open = everything released
-        expect = {"thumb_flex": 0.8, "index_flex": 0.8, "thumb_adduct": 0.6, "index_adduct": 0.6}.get(names[i], 0.0)
-        assert lib["pinch"].fingers[i] == pytest.approx(expect)
+        expect = {"thumb_flex": 0.7, "index_flex": 0.7, "thumb_adduct": 0.5, "index_adduct": 0.5}.get(names[i], 0.0)
+        assert pinch[i] == pytest.approx(expect)
     point = lib["point"].fingers
-    assert point[names.index("index_flex")] == 0 and point[names.index("index_extend")] == 0.5
-    assert point[names.index("middle_flex")] == 1.0
+    assert point[names.index("index_flex")] == 0 and point[names.index("middle_flex")] == pytest.approx(0.85)
+    assert point[names.index("thumb_flex")] == pytest.approx(0.5)
     assert lib["finger_3_curl"].fingers.tolist() == [0, 0, 1] + [0] * 9
     with pytest.raises(KeyError):
         lib["nope"]
