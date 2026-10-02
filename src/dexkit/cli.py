@@ -96,7 +96,8 @@ def open_session(
         if need_hand:
             s.hand_cfg = load_hand_config()
             if require_calibration and not mock and not s.hand_cfg.is_calibrated:
-                raise SafetyTrip(f"{s.hand_cfg.source} has placeholder calibration; run dexkit-calibrate-hand first")
+                raise SafetyTrip(f"{s.hand_cfg.source}: servos {s.hand_cfg.uncalibrated_ids} are not calibrated; "
+                                 "run dexkit-calibrate-hand (it skips the ones already done)")
             if mock:
                 from dexkit.hw.mock import MockHand
 

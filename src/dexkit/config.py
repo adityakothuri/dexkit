@@ -95,6 +95,7 @@ class ServoConfig:
     inverted: bool = False
     max_delta_ticks: int = 120
     stall_load: int = 800
+    calibrated: bool = False  # set by dexkit-calibrate-hand when slack/tight were measured
 
     @property
     def span(self) -> int:
@@ -123,6 +124,7 @@ class RollConfig:
     inverted: bool = False
     model: str = "HLS3640M"
     max_delta_ticks: int = 120
+    calibrated: bool = False
 
     def deg_to_ticks(self, deg: float) -> int:
         sign = -1.0 if self.inverted else 1.0
@@ -150,6 +152,8 @@ class HandDefaults:
     calib_torque_limit: int = 300
     calib_step_ticks: int = 40
     calib_max_travel_ticks: int = 3 * TICKS_PER_REV  # give up finding 'tight' after this much travel
+    calib_direction: int = 1  # +1: step toward higher counts, -1: lower; --reverse flips it
+    calib_direction: int = 1  # +1: step toward higher counts, -1: lower (the bench hand winds on -1)
     stall_load_factor: float = 1.5
     stall_time_s: float = 0.5
     stall_backoff: float = 0.05
@@ -205,8 +209,15 @@ class HandConfig:
         return [s.name for s in self.servos]
 
     @property
+    def uncalibrated_ids(self) -> list[int]:
+        ids = [s.id for s in self.servos if not s.calibrated]
+        if not self.roll.calibrated:
+            ids.append(self.roll.id)
+        return ids
+
+    @property
     def is_calibrated(self) -> bool:
-        return bool(self.calibrated_at)
+        return bool(self.calibrated_at) and not self.uncalibrated_ids
 
     def register_map(self) -> dict[str, int]:
         regs = dict(BASE_REGISTERS)

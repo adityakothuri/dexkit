@@ -26,6 +26,9 @@ def hand_cfg():
         s.id, s.slack, s.tight, s.inverted, s.stall_load = i + 1, 2048, 2700, False, 800
     cfg.roll.id, cfg.roll.center, cfg.roll.inverted = 13, 2048, False
     cfg.calibrated_at = None
+    for s in cfg.servos:
+        s.calibrated = False
+    cfg.roll.calibrated = False
     return cfg
 
 

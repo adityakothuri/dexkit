@@ -110,3 +110,29 @@ def test_calibration_walks_past_4095(hand_cfg):
     d = FeetechDriver(FeetechBus(t, timeout_s=0.002), hand_cfg.register_map())
     res = capture_servo(d, servos[0].id, "x", hand_cfg, ScriptedPrompter(tight_steps=20), step_delay=0.0)
     assert res is not None and res["tight"] > 4095
+
+
+def test_partial_calibration_is_not_calibrated(hand_cfg):
+    assert not hand_cfg.is_calibrated and len(hand_cfg.uncalibrated_ids) == 13
+    hand_cfg.calibrated_at = "2026-10-02T00:00:00"
+    hand_cfg.servos[0].calibrated = True
+    assert not hand_cfg.is_calibrated and hand_cfg.uncalibrated_ids == hand_cfg.ids[1:]
+    for s in hand_cfg.servos:
+        s.calibrated = True
+    hand_cfg.roll.calibrated = True
+    assert hand_cfg.is_calibrated
+
+
+def test_calibration_run_skips_done_servos_and_renames(tmp_path, monkeypatch):
+    from dexkit.config import load_hand_config
+    from dexkit.tools.calibrate_hand import main
+
+    out = tmp_path / "hand.yaml"
+    main(["--mock", "--scripted", "--servo", "3", "--name", "ring_x", "--finger", "ring", "--out", str(out)])
+    cfg = load_hand_config(out)
+    s3 = next(s for s in cfg.servos if s.id == 3)
+    assert s3.calibrated and s3.name == "ring_x" and s3.finger == "ring"
+    assert not cfg.is_calibrated and 3 not in cfg.uncalibrated_ids
+    main(["--mock", "--scripted", "--out", str(out)])  # does the remaining 12, skips servo 3
+    cfg = load_hand_config(out)
+    assert cfg.is_calibrated and next(s for s in cfg.servos if s.id == 3).name == "ring_x"

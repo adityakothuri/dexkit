@@ -10,8 +10,10 @@ multi-turn mode, so a tendon spool may need more than one revolution; positions 
            'x' aborts the servo)
   roll   - operator centres the forearm by hand; center ticks recorded
 
-Writes config/hand.yaml. Refuses to overwrite a real calibration without --force;
---servo N redoes one entry in place (a .bak copy is kept).
+Writes config/hand.yaml, marking each captured servo `calibrated: true`. A plain run
+does only the servos not yet marked; --force redoes all of them; --servo N redoes one
+(a .bak copy is kept). --name/--finger relabel that servo once you see which finger
+it moves (the shipped names are guesses).
 """
 
 from __future__ import annotations
@@ -169,8 +171,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--force", action="store_true", help="overwrite an existing real calibration")
     p.add_argument("--out", help="output yaml (default config/hand.yaml; data/mock/hand.yaml with --mock)")
     p.add_argument("--range-deg", type=float, default=None, help="roll range +/- degrees (default from yaml)")
+    p.add_argument("--name", help="with --servo: rename it in hand.yaml (e.g. pinky_flex)")
+    p.add_argument("--finger", help="with --servo: its finger group for poses (thumb/index/middle/ring/pinky/palm)")
     p.add_argument("--reverse", action="store_true",
-                   help="step toward LOWER position counts (use if the default direction unwinds the tendon)")
+                   help="step the opposite way from calib_direction in hand.yaml")
     p.add_argument("--step-ticks", type=int, default=None,
                    help="starting speed: ticks per 0.08 s step (default calib_step_ticks in hand.yaml)")
     p.add_argument("--torque", type=int, default=None,
@@ -191,8 +195,10 @@ def main(argv: list[str] | None = None) -> None:
     if args.torque is not None:
         cfg.defaults.calib_torque_limit = min(max(0, args.torque), 1000)
     if out.exists() and cfg.is_calibrated and args.servo is None and not args.force:
-        print(f"{out} already holds a calibration from {cfg.calibrated_at}; use --force or --servo N")
+        print(f"{out} already holds a full calibration from {cfg.calibrated_at}; use --force or --servo N")
         sys.exit(2)
+    if (args.name or args.finger) and args.servo is None:
+        p.error("--name/--finger need --servo N")
 
     if args.mock:
         from dexkit.hw.mock import MockFeetechSerial, mock_servos_for
@@ -206,10 +212,18 @@ def main(argv: list[str] | None = None) -> None:
 
     try:
         missing = [sid for sid in cfg.ids if d.ping(sid) is None]
-        targets = cfg.ids if args.servo is None else [args.servo]
-        if args.servo is not None and args.servo not in cfg.ids:
-            print(f"servo {args.servo} is not in hand.yaml (IDs {cfg.ids})")
-            sys.exit(2)
+        if args.servo is not None:
+            if args.servo not in cfg.ids:
+                print(f"servo {args.servo} is not in hand.yaml (IDs {cfg.ids})")
+                sys.exit(2)
+            targets = [args.servo]
+        elif args.force:
+            targets = cfg.ids
+        else:
+            targets = cfg.uncalibrated_ids
+            done = [sid for sid in cfg.ids if sid not in targets]
+            if done:
+                print(f"already calibrated, skipping: {done} (use --force to redo them)")
         if set(targets) & set(missing):
             print(f"servos not responding: {sorted(set(targets) & set(missing))}; run dexkit-scan")
             sys.exit(1)
@@ -218,19 +232,28 @@ def main(argv: list[str] | None = None) -> None:
         print("voltages OK:", ", ".join(f"{k}:{v:.1f}V" for k, v in volts.items()))
 
         by_id = {s["id"]: s for s in raw["servos"]}
+        if args.servo is not None and args.servo != cfg.roll.id:
+            if args.name:
+                by_id[args.servo]["name"] = args.name
+            if args.finger:
+                by_id[args.servo]["finger"] = args.finger
+        direction = -cfg.defaults.calib_direction if args.reverse else cfg.defaults.calib_direction
+        captured: list[int] = []
         for sid in targets:
             if sid == cfg.roll.id:
                 center = capture_roll(d, sid, ui)
                 if center is not None:
                     raw["roll"]["center"] = int(center)
+                    raw["roll"]["calibrated"] = True
+                    captured.append(sid)
                     if args.range_deg is not None:
                         raw["roll"]["range_deg"] = float(args.range_deg)
                 continue
             name = by_id[sid]["name"]
-            result = capture_servo(d, sid, name, cfg, ui, step_delay=step_delay,
-                                   direction=-1 if args.reverse else 1)
+            result = capture_servo(d, sid, name, cfg, ui, step_delay=step_delay, direction=direction)
             if result:
-                by_id[sid].update(result)
+                by_id[sid].update(result, calibrated=True)
+                captured.append(sid)
     except SafetyTrip as e:
         print(f"SAFETY: {e}")
         sys.exit(1)
@@ -245,8 +268,12 @@ def main(argv: list[str] | None = None) -> None:
     if out.exists() and args.servo is not None:
         shutil.copy(out, out.with_suffix(".yaml.bak"))
     dump_yaml(raw, out, header=HEADER)
-    load_hand_config(out)  # re-read to prove the written file loads
-    print(f"\nwrote {out}")
+    final = load_hand_config(out)  # re-read to prove the written file loads
+    print(f"\nwrote {out}: captured {captured}")
+    if final.uncalibrated_ids:
+        print(f"still to do: {final.uncalibrated_ids}  (run dexkit-calibrate-hand again, or --servo N)")
+    else:
+        print("all servos calibrated; the hand is ready for dexkit-pose")
 
 if __name__ == "__main__":
     main()
