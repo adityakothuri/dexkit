@@ -116,6 +116,8 @@ dexkit-scan
 
 ### A5. Calibration (one motor at a time)
 
+> The same steps, on their own page with a troubleshooting table: **[CALIBRATION.md](CALIBRATION.md)**.
+
 There are 13 motors: 12 pull tendons in the hand (IDs 0–11) and 1 twists the wrist (ID 12). You calibrate each one on its own. The finished list is always one command away:
 
 ```bash

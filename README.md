@@ -8,7 +8,7 @@ This repo drives the DexKit foam hand and its 3-axis GRBL gantry from plain Pyth
 
 Everything runs against simulated hardware (`--mock`), so the whole stack can be checked before any USB device is plugged in.
 
-**New here? Read [HOW_TO_USE.md](HOW_TO_USE.md)**: a step-by-step guide from plugging in to running poses.
+**New here? Read [HOW_TO_USE.md](HOW_TO_USE.md)** (and [CALIBRATION.md](CALIBRATION.md) for the one-time calibration): a step-by-step guide from plugging in to running poses.
 
 It runs natively on macOS as well as Linux. Ports are auto-detected by USB ID (`make ports` shows what was found), so the udev rule and the VM below are optional. To force a port, set `DEXKIT_HAND_PORT` or `DEXKIT_GANTRY_PORT`.
 
