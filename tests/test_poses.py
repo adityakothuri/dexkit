@@ -35,7 +35,7 @@ def test_defaults_load_with_generated_curls(hand_cfg):
     names = hand_cfg.names
     for i in range(12):
         assert lib["fist"].fingers[i] == (1.0 if roles[i] == "flex" else 0.0)
-        assert lib["open"].fingers[i] == pytest.approx(0.5 if roles[i] == "extend" else 0.0)
+        assert lib["open"].fingers[i] == 0.0  # open = everything released
         expect = {"thumb_flex": 0.8, "index_flex": 0.8, "thumb_adduct": 0.6, "index_adduct": 0.6}.get(names[i], 0.0)
         assert lib["pinch"].fingers[i] == pytest.approx(expect)
     point = lib["point"].fingers
